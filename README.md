@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/kasonyang/netlib.svg?branch=master)](https://travis-ci.org/kasonyang/netlib)
+
 # net-lib
 A network library for java
 
