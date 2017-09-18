@@ -8,3 +8,5 @@ dependencies {
 
 sourceCompatibility = JavaVersion.toVersion("1.6")
 targetCompatibility = JavaVersion.toVersion("1.6")
+
+apply from:'maven-publish.gradle'
