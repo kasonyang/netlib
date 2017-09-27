@@ -2,7 +2,6 @@ package site.kason.netlib.tcp;
 
 import java.io.IOException;
 import java.net.SocketAddress;
-import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.SocketChannel;
 import java.util.LinkedList;
@@ -181,7 +180,8 @@ public class Channel implements Hostable {
   }
 
   public void installFilter(ChannelFilter filter) {
-    filter.install(this);
+    this.filters.add(filter);
+    filter.installed(this);
   }
 
   public void setExceptionHandler(ExceptionHandler exceptionHandler) {
