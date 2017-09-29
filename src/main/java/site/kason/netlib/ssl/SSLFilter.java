@@ -34,30 +34,40 @@ public class SSLFilter implements ChannelFilter {
 
     @Override
     public WriteTask filterWrite(WriteTask task) {
+      if(task instanceof SSLHandshakeWriteTask){
+        return task;
+      }else{
         return new SSLWriteTask(session, task);
+      }
     }
 
     @Override
     public ReadTask filterRead(ReadTask task) {
+      if(task instanceof SSLHandshakeReadTask){
+        return task;
+      }else{
         return new SSLReadTask(session, task);
+      }
     }
 
     @Override
-    public void install(Channel ch) {
+    public void installed(Channel ch) {
         this.channel = ch;
         this.session = new SSLSession(ch, new BufferTransfer(), sslEngine);
-        ch.write(new WriteTask() {
-            @Override
-            public boolean handleWrite(Transfer transfer) {
-                return true;
-            }
-        });
-        ch.read(new ReadTask() {
-            @Override
-            public boolean handleRead(Transfer transfer) {
-                return true;
-            }
-        });
+        ch.write(new SSLHandshakeWriteTask(session));
+        ch.read(new SSLHandshakeReadTask(session));
+//        ch.write(new WriteTask() {
+//            @Override
+//            public boolean handleWrite(Transfer transfer) {
+//                return true;
+//            }
+//        });
+//        ch.read(new ReadTask() {
+//            @Override
+//            public boolean handleRead(Transfer transfer) {
+//                return true;
+//            }
+//        });
     }
 
 }

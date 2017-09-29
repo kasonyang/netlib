@@ -145,4 +145,9 @@ public class IOBuffer {
         this.writeOffset = newPosition;
     }
 
+  @Override
+  public String toString() {
+    return "IOBuffer(" + "limit=" + limit + ", readOffset=" + readOffset + ", writeOffset=" + writeOffset + ')';
+  }
+
 }

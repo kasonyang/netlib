@@ -53,7 +53,7 @@ class SSLReadTask implements ReadTask {
                 p++;
                 originalChannel.prepareRead();
             } else {
-                originalChannel.prepareRead();
+                return this.handleRead(transfer);
             }
             return false;
         }

@@ -53,7 +53,7 @@ class SSLWriteTask implements WriteTask {
                 session.getChannel().prepareWrite();
                 return false;
             } else {
-                return false;
+                return originalFinished;
             }
         }
 
