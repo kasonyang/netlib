@@ -20,9 +20,8 @@ public class Pipeline {
 
   private final List<IOBuffer> processorOutBuffers = new ArrayList();
 
-  public Pipeline(Processor... processors) {
+  public Pipeline() {
     inBuffer = outBuffer = IOBuffer.create(4096);
-    this.addProcessor(processors);
   }
 
   public IOBuffer getInBuffer() {
