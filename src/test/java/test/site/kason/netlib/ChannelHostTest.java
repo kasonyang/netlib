@@ -63,35 +63,23 @@ public class ChannelHostTest {
         log("client:connected");
         client.write(new WriteTask() {
           @Override
-          public boolean handleWrite(Transfer transfer) {
+          public boolean handleWrite(IOBuffer buffer) {
             log("client:handling write");
-            try {
-              transfer.write(writeBuffer);
-              int remaining = writeBuffer.getReadableSize();
-              if (remaining > 0) {
-                client.prepareWrite();
-              }
-              return remaining <= 0;
-            } catch (IOException ex) {
-              fail("client:write exception");
-              return false;
+            buffer.push(writeBuffer);
+            int remaining = writeBuffer.getReadableSize();
+            if (remaining > 0) {
+              client.prepareWrite();
             }
+            return remaining <= 0;
           }
 
         });
         client.read(new ReadTask() {
           @Override
-          public boolean handleRead(Transfer transfer) {
-            try {
-              IOBuffer readBuffer = IOBuffer.create(10);
-              byte[] buffer = new byte[10];
-              int rlen = transfer.read(readBuffer);
-              if (rlen > 0) {
-                readBuffer.poll(buffer, 0, rlen);
-                log("client:read " + rlen + " bytes");
-              }
-            } catch (IOException ex) {
-              Logger.getLogger(ChannelHostTest.class.getName()).log(Level.SEVERE, null, ex);
+          public boolean handleRead(IOBuffer b) {
+            int rlen = b.getReadableSize();
+            if (rlen > 0) {
+              log("client:read " + rlen + " bytes");
             }
             //atcp.stopListen();
             return true;
@@ -119,31 +107,25 @@ public class ChannelHostTest {
           ch.installFilter(serverFilter);
         }
         log("server accepted:" + ch.toString());
-        final IOBuffer readBuffer = IOBuffer.create(data.length);
+        //final IOBuffer readBuffer = IOBuffer.create(data.length);
         ch.read(new ReadTask() {
           @Override
-          public boolean handleRead(Transfer transfer) {
+          public boolean handleRead(IOBuffer readBuffer) {
             log("server read");
-            try {
-              readBuffer.compact();
-              int readSize = transfer.read(readBuffer);
-              log("server:read " + readSize + " bytes");
-              if (readSize == -1) {
-                fail("connection closed.");
-                return true;
-              }
-              if (readBuffer.getReadableSize() >= data.length) {
-                byte[] receivedData = new byte[data.length];
-                readBuffer.poll(receivedData);
-                assertArrayEquals(data, receivedData);
-                atcp.stopListen();
-                return true;
-              } else {
-                return false;
-              }
-            } catch (IOException ex) {
-              fail("read exception");
+            int readSize = readBuffer.getReadableSize();
+            log("server:read " + readSize + " bytes");
+            if (readSize == -1) {
+              fail("connection closed.");
               return true;
+            }
+            if (readBuffer.getReadableSize() >= data.length) {
+              byte[] receivedData = new byte[data.length];
+              readBuffer.poll(receivedData);
+              assertArrayEquals(data, receivedData);
+              atcp.stopListen();
+              return true;
+            } else {
+              return false;
             }
           }
 

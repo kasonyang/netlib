@@ -2,12 +2,11 @@ package site.kason.netlib.ssl;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
-import site.kason.netlib.tcp.BufferTransfer;
 import site.kason.netlib.tcp.Channel;
 import site.kason.netlib.tcp.ChannelFilter;
 import site.kason.netlib.tcp.ReadTask;
-import site.kason.netlib.tcp.Transfer;
 import site.kason.netlib.tcp.WriteTask;
+import site.kason.netlib.tcp.pipeline.Pipeline;
 
 /**
  *
@@ -34,28 +33,22 @@ public class SSLFilter implements ChannelFilter {
 
     @Override
     public WriteTask filterWrite(WriteTask task) {
-      if(task instanceof SSLHandshakeWriteTask){
-        return task;
-      }else{
-        return new SSLWriteTask(session, task);
-      }
+      return task;
     }
 
     @Override
     public ReadTask filterRead(ReadTask task) {
-      if(task instanceof SSLHandshakeReadTask){
-        return task;
-      }else{
-        return new SSLReadTask(session, task);
-      }
+      return task;
     }
 
     @Override
     public void installed(Channel ch) {
-        this.channel = ch;
-        this.session = new SSLSession(ch, new BufferTransfer(), sslEngine);
-        ch.write(new SSLHandshakeWriteTask(session));
-        ch.read(new SSLHandshakeReadTask(session));
+      this.channel = ch;
+      this.session = new SSLSession(ch, sslEngine);
+      ch.setEncodePipeline(new Pipeline(new SSLEncodeProcessor(session)));
+      ch.setDecodePipeline(new Pipeline(new SSLDecodeProcessor(session)));
+        //ch.write(new SSLHandshakeWriteTask(session));
+        //ch.read(new SSLHandshakeReadTask(session));
 //        ch.write(new WriteTask() {
 //            @Override
 //            public boolean handleWrite(Transfer transfer) {

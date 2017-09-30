@@ -18,9 +18,11 @@ public class ByteWriteTask implements WriteTask {
   }
 
   @Override
-  public boolean handleWrite(Transfer transfer) throws Exception {
-    transfer.write(buffer);
-    return buffer.getReadableSize() <= 0;
+  public boolean handleWrite(IOBuffer buffer) throws Exception {
+    //TODO impl
+    //transfer.write(buffer);
+    //return buffer.getReadableSize() <= 0;
+    throw new UnsupportedOperationException();
   }
   
 }
