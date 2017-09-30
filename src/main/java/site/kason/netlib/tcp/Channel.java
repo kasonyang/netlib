@@ -47,9 +47,9 @@ public class Channel implements Hostable {
 
   private ExceptionHandler exceptionHandler = DEFAULT_EXCEPTION_HANDLER;
   
-  private Pipeline encodePipeline = new Pipeline();
+  private final Pipeline encodePipeline = new Pipeline();
   
-  private Pipeline decodePipeline = new Pipeline();
+  private final Pipeline decodePipeline = new Pipeline();
 
   protected Channel(SocketChannel socketChannel, Host host) {
     this.socketChannel = socketChannel;
@@ -253,14 +253,6 @@ public class Channel implements Hostable {
 
   public Pipeline getDecodePipeline() {
     return decodePipeline;
-  }
-
-  public void setEncodePipeline(Pipeline encodePipeline) {
-    this.encodePipeline = encodePipeline;
-  }
-
-  public void setDecodePipeline(Pipeline decodePipeline) {
-    this.decodePipeline = decodePipeline;
   }
 
 }

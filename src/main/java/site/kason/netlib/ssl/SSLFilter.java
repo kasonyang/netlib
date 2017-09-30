@@ -45,22 +45,8 @@ public class SSLFilter implements ChannelFilter {
     public void installed(Channel ch) {
       this.channel = ch;
       this.session = new SSLSession(ch, sslEngine);
-      ch.setEncodePipeline(new Pipeline(new SSLEncodeProcessor(session)));
-      ch.setDecodePipeline(new Pipeline(new SSLDecodeProcessor(session)));
-        //ch.write(new SSLHandshakeWriteTask(session));
-        //ch.read(new SSLHandshakeReadTask(session));
-//        ch.write(new WriteTask() {
-//            @Override
-//            public boolean handleWrite(Transfer transfer) {
-//                return true;
-//            }
-//        });
-//        ch.read(new ReadTask() {
-//            @Override
-//            public boolean handleRead(Transfer transfer) {
-//                return true;
-//            }
-//        });
+      ch.getEncodePipeline().addProcessor(new SSLEncodeProcessor(session));
+      ch.getDecodePipeline().addProcessor(new SSLDecodeProcessor(session));
     }
 
 }
