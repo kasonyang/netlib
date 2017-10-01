@@ -29,22 +29,12 @@ public class SSLDecodeProcessor implements Processor {
 
   @Override
   public void process(IOBuffer in, IOBuffer out) {
-    if(sslSession.isHandshaked()){
-      try {
-        sslSession.decrypt(in, out);
-      } catch (SSLException ex) {
-        //TODO handle ex
-        throw new RuntimeException(ex);
-      }
-    }else{
-      try {
-        sslSession.handshakeUnwrap(in);
-      } catch (IOException ex) {
-        //TODO handle ex
-        throw new RuntimeException(ex);
-      }
-    }
-    
+    try {
+      sslSession.handleRead(in, out);
+    } catch (Exception ex) {
+      //TODO handle ex
+      throw new RuntimeException(ex);
+    }    
   }
 
 }
