@@ -21,6 +21,10 @@ import site.kason.netlib.tcp.pipeline.Codec;
 import site.kason.netlib.tcp.tasks.ByteWriteTask;
 
 public class ChannelHostTest {
+  
+  public static class StopException extends RuntimeException{
+    
+  }
 
   @Test
   public void testSSL() throws Exception {
@@ -41,7 +45,11 @@ public class ChannelHostTest {
     final ExceptionHandler exh = new ExceptionHandler() {
       @Override
       public void handleException(Channel ch, Exception ex) {
-        throw new RuntimeException(ex);
+        if(ex instanceof StopException){
+          atcp.stopListen();
+        }else{
+          throw new RuntimeException(ex);
+        }
       }
     };
     client.setExceptionHandler(exh);
@@ -57,8 +65,12 @@ public class ChannelHostTest {
             if (rlen > 0) {
               log("client:read " + rlen + " bytes");
             }
+            byte[] receivedData = new byte[b.getReadableSize()];
+            b.poll(receivedData);
+            assertArrayEquals(data, receivedData);
+            throw new StopException();
             //atcp.stopListen();
-            return true;
+            //return true;
           }
 
         });
@@ -77,7 +89,7 @@ public class ChannelHostTest {
     });
     ServerChannel server = atcp.createServerChannel(addr, new AcceptHandler() {
       @Override
-      public void accepted(Channel ch) {
+      public void accepted(final Channel ch) {
         ch.setExceptionHandler(exh);
         if (useSSL) {
           ch.addCodec(createSSLCodec(ch, false));
@@ -98,7 +110,8 @@ public class ChannelHostTest {
               byte[] receivedData = new byte[data.length];
               readBuffer.poll(receivedData);
               assertArrayEquals(data, receivedData);
-              atcp.stopListen();
+              ch.write(new ByteWriteTask(receivedData, 0, receivedData.length));
+              //atcp.stopListen();
               return true;
             } else {
               return false;
