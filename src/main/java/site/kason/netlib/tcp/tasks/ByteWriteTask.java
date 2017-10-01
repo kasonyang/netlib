@@ -1,7 +1,6 @@
 package site.kason.netlib.tcp.tasks;
 
 import site.kason.netlib.io.IOBuffer;
-import site.kason.netlib.tcp.Transfer;
 import site.kason.netlib.tcp.WriteTask;
 
 /**

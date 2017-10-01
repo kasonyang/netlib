@@ -1,8 +1,6 @@
 package site.kason.netlib.ssl;
 
 import java.io.IOException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.net.ssl.SSLException;
 import site.kason.netlib.io.BufferUnderflowException;
 import site.kason.netlib.io.IOBuffer;

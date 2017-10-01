@@ -1,7 +1,5 @@
 package site.kason.netlib.tcp.pipeline;
 
-import site.kason.netlib.tcp.Channel;
-
 /**
  *
  * @author Kason Yang

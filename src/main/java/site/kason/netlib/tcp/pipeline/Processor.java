@@ -1,7 +1,6 @@
 package site.kason.netlib.tcp.pipeline;
 
 import site.kason.netlib.io.IOBuffer;
-import site.kason.netlib.tcp.Channel;
 
 /**
  *

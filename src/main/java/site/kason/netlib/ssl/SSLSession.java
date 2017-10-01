@@ -9,7 +9,6 @@ import javax.net.ssl.SSLException;
 import site.kason.netlib.io.BufferUnderflowException;
 import site.kason.netlib.io.IOBuffer;
 import site.kason.netlib.tcp.Channel;
-import site.kason.netlib.tcp.Transfer;
 
 /**
  *
