@@ -86,6 +86,7 @@ public class Channel implements Hostable {
         connectionHandler.channelClosed(this);
       }
     } finally {
+      host.closeChannel(this);
       socketChannel.close();
     }
   }

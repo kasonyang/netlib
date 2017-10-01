@@ -2,6 +2,7 @@ package site.kason.netlib.tcp;
 
 import java.io.IOException;
 import java.net.SocketAddress;
+import java.nio.channels.CancelledKeyException;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
@@ -118,7 +119,7 @@ public class ChannelHost implements Host {
         if (!key.isValid()) {
           continue;
         }
-
+        
         if (key.isAcceptable()) {
           ServerSocketChannel nssc = (ServerSocketChannel) key.channel();
           try {
@@ -132,7 +133,11 @@ public class ChannelHost implements Host {
             throw new RuntimeException(e);
           }
         } else {
-          this.onSocketChannelKey(key);
+          try{
+            this.onSocketChannelKey(key);
+          }catch(CancelledKeyException ex){
+            
+          }
         }
       }
     }
@@ -151,6 +156,14 @@ public class ChannelHost implements Host {
         sc.register(selector, 0);
       }
     }
+  }
+  
+  @Override
+  public void closeChannel(Hostable channel){
+    SelectableChannel sc = channel.getSelectableChannel();
+    channels.remove(sc);
+    socketChannels.remove(channel);
+    sc.keyFor(selector).cancel();
   }
 
   @Override

@@ -1,9 +1,12 @@
 package test.site.kason.netlib;
 
+import java.io.IOException;
 import static org.junit.Assert.*;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.net.ssl.SSLContext;
 
 import org.junit.Test;
@@ -46,7 +49,11 @@ public class ChannelHostTest {
       @Override
       public void handleException(Channel ch, Exception ex) {
         if(ex instanceof StopException){
-          atcp.stopListen();
+          try {
+            ch.close();
+          } catch (IOException ex1) {
+            throw new RuntimeException(ex1);
+          }
         }else{
           throw new RuntimeException(ex);
         }
@@ -84,6 +91,7 @@ public class ChannelHostTest {
       @Override
       public void channelClosed(Channel ch) {
         log("channel closed:" + ch);
+        atcp.stopListen();
       }
 
     });

@@ -24,5 +24,7 @@ public interface Host {
     
     public ServerChannel createServerChannel(SocketAddress endpoint, AcceptHandler acceptHandler) throws IOException;
     
+    public void closeChannel(Hostable ch);
+    
 
 }
