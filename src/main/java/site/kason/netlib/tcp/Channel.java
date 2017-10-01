@@ -128,35 +128,36 @@ public class Channel implements Hostable {
     host.prepareWrite(this);
   }
 
-  public boolean handleWrite() {
+  protected boolean handleWrite() {
     SocketChannel sc = this.socketChannel;
     IOBuffer out = encodePipeline.getOutBuffer();
-    encodePipeline.process();
-    if(out.getReadableSize()>0){
-      ByteBuffer byteBuffer = ByteBuffer.wrap(out.array(),out.getReadPosition(),out.getReadableSize());
-      try {
+    try {      
+      encodePipeline.process();
+      if(out.getReadableSize()>0){
+        ByteBuffer byteBuffer = ByteBuffer.wrap(out.array(),out.getReadPosition(),out.getReadableSize());
         int wlen = sc.write(byteBuffer);
         out.skip(wlen);
         return false;
-      } catch (IOException ex) {
-        //TODO handle ex
-        throw new RuntimeException(ex);
       }
-    }
-    this.writeRequests--;
-    List<WriteTask> writeCallbacks = this.writeTasks;
-    if (writeCallbacks.size() > 0) {
-      WriteTask cb = writeCallbacks.get(0);
-      boolean writeFinished;
-      try {
-        writeFinished = cb.handleWrite(encodePipeline.getInBuffer());
-      } catch (Exception ex) {
-        writeFinished = false;
-        exceptionHandler.handleException(this, ex);
+      this.writeRequests--;
+      List<WriteTask> writeCallbacks = this.writeTasks;
+      if (writeCallbacks.size() > 0) {
+        WriteTask cb = writeCallbacks.get(0);
+        boolean writeFinished;
+        try {
+          writeFinished = cb.handleWrite(encodePipeline.getInBuffer());
+        } catch (Exception ex) {
+          writeFinished = false;
+          exceptionHandler.handleException(this, ex);
+        }
+        if (writeFinished) {
+          writeCallbacks.remove(0);
+        }
       }
-      if (writeFinished) {
-        writeCallbacks.remove(0);
-      }
+    } catch (IOException ex) {
+      exceptionHandler.handleException(this, ex);
+    } catch (RuntimeException ex){
+      exceptionHandler.handleException(this, ex);
     }
     return writeRequests <= 0 && out.getReadableSize()<=0;
   }
@@ -166,40 +167,41 @@ public class Channel implements Hostable {
     host.prepareRead(this);
   }
 
-  public boolean handleRead() {
-    SocketChannel sc = this.socketChannel;
-    IOBuffer in = decodePipeline.getInBuffer();
-    IOBuffer out = decodePipeline.getOutBuffer();
-    ByteBuffer byteBuffer = ByteBuffer.wrap(in.array(), in.getWritePosition(), in.getWritableSize());
+  protected boolean handleRead() {
     try {
+      SocketChannel sc = this.socketChannel;
+      IOBuffer in = decodePipeline.getInBuffer();
+      IOBuffer out = decodePipeline.getOutBuffer();
+      ByteBuffer byteBuffer = ByteBuffer.wrap(in.array(), in.getWritePosition(), in.getWritableSize());
       int rlen = sc.read(byteBuffer);
       if(rlen==-1){
         this.close();
         return true;
       }
       in.setWritePosition(in.getWritePosition()+rlen);
+      decodePipeline.process();
+      if(out.getReadableSize()<=0){
+        return false;
+      }
+      this.readRequests--;
+      List<ReadTask> readCallbacks = readTasks;
+      if (readCallbacks.size() > 0) {
+        ReadTask cb = readCallbacks.get(0);
+        boolean readFinished;
+        try {
+          readFinished = cb.handleRead(out);
+        } catch (Exception ex) {
+          readFinished = false;
+          exceptionHandler.handleException(this, ex);
+        }
+        if (readFinished) {
+          readCallbacks.remove(0);
+        }
+      }
     } catch (IOException ex) {
-      //TODO handle ex
-      throw new RuntimeException(ex);
-    }
-    decodePipeline.process();
-    if(out.getReadableSize()<=0){
-      return false;
-    }
-    this.readRequests--;
-    List<ReadTask> readCallbacks = readTasks;
-    if (readCallbacks.size() > 0) {
-      ReadTask cb = readCallbacks.get(0);
-      boolean readFinished;
-      try {
-        readFinished = cb.handleRead(out);
-      } catch (Exception ex) {
-        readFinished = false;
-        exceptionHandler.handleException(this, ex);
-      }
-      if (readFinished) {
-        readCallbacks.remove(0);
-      }
+      this.exceptionHandler.handleException(this, ex);
+    } catch (RuntimeException ex){
+      this.exceptionHandler.handleException(this, ex);
     }
     return this.readRequests <= 0;
   }

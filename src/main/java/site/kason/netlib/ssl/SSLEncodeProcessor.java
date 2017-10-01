@@ -1,6 +1,8 @@
 package site.kason.netlib.ssl;
 
 import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.net.ssl.SSLException;
 import site.kason.netlib.io.BufferUnderflowException;
 import site.kason.netlib.io.IOBuffer;
@@ -32,8 +34,8 @@ public class SSLEncodeProcessor implements Processor {
   public void process(IOBuffer in, IOBuffer out) {
     try {
       sslSession.handleWrite(in, out);
-    } catch (Exception ex) {
-      throw new RuntimeException(ex);
+    } catch (IOException ex) {
+      throw new SSLEncodeException(ex);
     }
   }
 

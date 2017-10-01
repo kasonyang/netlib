@@ -133,9 +133,6 @@ class SSLSession {
       channel.prepareWrite();
     } else if (status == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
       channel.prepareRead();
-    } else if (status == SSLEngineResult.Status.CLOSED) {
-      //TODO handle closed
-      throw new RuntimeException("channel closed.");
     } else {
       throw new RuntimeException("unexpected status:" + status);
     }
