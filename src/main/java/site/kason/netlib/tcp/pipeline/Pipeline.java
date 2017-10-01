@@ -33,14 +33,22 @@ public class Pipeline {
   }
 
   public void process() {
-    //TODO loop
-    this.outBuffer.compact();
-    for (int i = 0; i < processors.size(); i++) {
-      processorOutBuffers.get(i).compact();
-      processors.get(i).process(processorInBuffers.get(i), processorOutBuffers.get(i));
-      processorInBuffers.get(i).compact();
+    boolean produced = true;
+    while(produced){
+      produced = false;
+      for (int i = 0; i < processors.size(); i++) {
+        IOBuffer in = processorInBuffers.get(i);
+        IOBuffer out = processorOutBuffers.get(i);
+        out.compact();
+        int oldOutWritePos = out.getWritePosition();
+        processors.get(i).process(in, out);
+        int written = out.getWritePosition()-oldOutWritePos;
+        if(written>0){
+          produced = true;
+        }
+        in.compact();
+      }
     }
-    this.inBuffer.compact();
   }
 
   public void addProcessor(Processor... ps) {
