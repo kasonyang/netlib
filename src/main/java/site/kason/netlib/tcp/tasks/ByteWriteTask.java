@@ -1,7 +1,6 @@
 package site.kason.netlib.tcp.tasks;
 
 import site.kason.netlib.io.IOBuffer;
-import site.kason.netlib.tcp.Transfer;
 import site.kason.netlib.tcp.WriteTask;
 
 /**
@@ -18,9 +17,11 @@ public class ByteWriteTask implements WriteTask {
   }
 
   @Override
-  public boolean handleWrite(Transfer transfer) throws Exception {
-    transfer.write(buffer);
-    return buffer.getReadableSize() <= 0;
+  public boolean handleWrite(IOBuffer buffer) throws Exception {
+    //TODO impl
+    //transfer.write(buffer);
+    //return buffer.getReadableSize() <= 0;
+    throw new UnsupportedOperationException();
   }
   
 }

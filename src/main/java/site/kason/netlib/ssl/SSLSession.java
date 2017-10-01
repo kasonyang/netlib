@@ -8,9 +8,7 @@ import javax.net.ssl.SSLEngineResult.HandshakeStatus;
 import javax.net.ssl.SSLException;
 import site.kason.netlib.io.BufferUnderflowException;
 import site.kason.netlib.io.IOBuffer;
-import site.kason.netlib.tcp.BufferTransfer;
 import site.kason.netlib.tcp.Channel;
-import site.kason.netlib.tcp.Transfer;
 
 /**
  *
@@ -19,8 +17,6 @@ import site.kason.netlib.tcp.Transfer;
 class SSLSession {
 
     private final Channel channel;
-
-    private final BufferTransfer bufferTransfer;
 
     private final SSLEngine sslEngine;
 
@@ -42,9 +38,8 @@ class SSLSession {
     
     private final ByteBuffer outAppBuffer;
 
-    public SSLSession(Channel channel, BufferTransfer bufferTransfer,SSLEngine sslEngine) {
+    public SSLSession(Channel channel,SSLEngine sslEngine) {
         this.channel = channel;
-        this.bufferTransfer = bufferTransfer;
         this.sslEngine = sslEngine;
         javax.net.ssl.SSLSession sess = sslEngine.getSession();
         int maxPacketSize = sess.getPacketBufferSize();
@@ -61,18 +56,16 @@ class SSLSession {
         return channel;
     }
 
-    public BufferTransfer getBufferTransfer() {
-        return bufferTransfer;
-    }
-
     public boolean isHandshaked() {
         return this.handshaked;
     }
 
     
-    public void handshakeUnwrap(Transfer transfer) throws IOException {
+    public void handshakeUnwrap(IOBuffer in) throws IOException {
       //System.out.println("handling unwrap:" + channel);
-      this.readToBuffer(transfer);
+      //this.readToBuffer(transfer);
+      this.handshakeReadBuffer.compact();
+      this.handshakeReadBuffer.push(in);
       if(this.finishHandshakePending){
         this.finishHandshake();
       }else{
@@ -81,9 +74,10 @@ class SSLSession {
     }
 
     //TODO rename to handleWrite
-    public void handshakeWrap(Transfer transfer) throws SSLException, IOException {
+    public void handshakeWrap(IOBuffer out) throws SSLException, IOException {
       //System.out.println("handling wrap:" + channel);
-      this.writeToTransfer(transfer);
+      this.handshakeWriteBuffer.compact();
+      out.push(this.handshakeWriteBuffer);
       if(this.finishHandshakePending){
         this.finishHandshake();
       }else{
@@ -144,20 +138,6 @@ class SSLSession {
         throw new RuntimeException("unexpected status:"+status);
       }
     }
-    
-    private void readToBuffer(Transfer transfer) throws IOException{
-      handshakeReadBuffer.compact();
-      while(handshakeReadBuffer.getWritableSize()>0 && transfer.read(handshakeReadBuffer)>0){
-        //System.out.println("read");
-      }
-    }
-    
-    private void writeToTransfer(Transfer transfer) throws IOException{
-      while(handshakeWriteBuffer.getReadableSize()>0 && transfer.write(handshakeWriteBuffer)>0){
-        //System.out.println("written");
-      }
-      handshakeWriteBuffer.compact();
-    }
 
     public void encrypt(IOBuffer source, IOBuffer dest) throws SSLException,BufferUnderflowException {
       ByteBuffer srcBf = ByteBuffer.wrap(source.array(),source.getReadPosition(),source.getReadableSize());
@@ -188,6 +168,14 @@ class SSLSession {
       channel.prepareWrite();
       channel.prepareRead();
       //System.out.println("handshake finished.");
+    }
+    
+    public int getApplicationBufferSize(){
+      return this.sslEngine.getSession().getApplicationBufferSize();
+    }
+    
+    public int getPacketBufferSize(){
+      return this.sslEngine.getSession().getPacketBufferSize();
     }
 
 }

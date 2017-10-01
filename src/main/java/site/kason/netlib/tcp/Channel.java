@@ -2,12 +2,16 @@ package site.kason.netlib.tcp;
 
 import java.io.IOException;
 import java.net.SocketAddress;
+import java.nio.ByteBuffer;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.SocketChannel;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import site.kason.netlib.io.IOBuffer;
+import site.kason.netlib.tcp.pipeline.Codec;
+import site.kason.netlib.tcp.pipeline.Pipeline;
 
 public class Channel implements Hostable {
 
@@ -43,6 +47,10 @@ public class Channel implements Hostable {
   };
 
   private ExceptionHandler exceptionHandler = DEFAULT_EXCEPTION_HANDLER;
+  
+  private final Pipeline encodePipeline = new Pipeline();
+  
+  private final Pipeline decodePipeline = new Pipeline();
 
   protected Channel(SocketChannel socketChannel, Host host) {
     this.socketChannel = socketChannel;
@@ -121,15 +129,27 @@ public class Channel implements Hostable {
   }
 
   public boolean handleWrite() {
-    this.writeRequests--;
     SocketChannel sc = this.socketChannel;
+    IOBuffer out = encodePipeline.getOutBuffer();
+    encodePipeline.process();
+    if(out.getReadableSize()>0){
+      ByteBuffer byteBuffer = ByteBuffer.wrap(out.array(),out.getReadPosition(),out.getReadableSize());
+      try {
+        int wlen = sc.write(byteBuffer);
+        out.skip(wlen);
+        return false;
+      } catch (IOException ex) {
+        //TODO handle ex
+        throw new RuntimeException(ex);
+      }
+    }
+    this.writeRequests--;
     List<WriteTask> writeCallbacks = this.writeTasks;
     if (writeCallbacks.size() > 0) {
       WriteTask cb = writeCallbacks.get(0);
-      DefaultTransfer transfer = new DefaultTransfer(sc);
       boolean writeFinished;
       try {
-        writeFinished = cb.handleWrite(transfer);
+        writeFinished = cb.handleWrite(encodePipeline.getInBuffer());
       } catch (Exception ex) {
         writeFinished = false;
         exceptionHandler.handleException(this, ex);
@@ -138,7 +158,7 @@ public class Channel implements Hostable {
         writeCallbacks.remove(0);
       }
     }
-    return writeRequests <= 0;
+    return writeRequests <= 0 && out.getReadableSize()<=0;
   }
 
   public synchronized void prepareRead() {
@@ -147,15 +167,32 @@ public class Channel implements Hostable {
   }
 
   public boolean handleRead() {
-    this.readRequests--;
     SocketChannel sc = this.socketChannel;
+    IOBuffer in = decodePipeline.getInBuffer();
+    IOBuffer out = decodePipeline.getOutBuffer();
+    ByteBuffer byteBuffer = ByteBuffer.wrap(in.array(), in.getWritePosition(), in.getWritableSize());
+    try {
+      int rlen = sc.read(byteBuffer);
+      if(rlen==-1){
+        this.close();
+        return true;
+      }
+      in.setWritePosition(in.getWritePosition()+rlen);
+    } catch (IOException ex) {
+      //TODO handle ex
+      throw new RuntimeException(ex);
+    }
+    decodePipeline.process();
+    if(out.getReadableSize()<=0){
+      return false;
+    }
+    this.readRequests--;
     List<ReadTask> readCallbacks = readTasks;
     if (readCallbacks.size() > 0) {
       ReadTask cb = readCallbacks.get(0);
-      DefaultTransfer transfer = new DefaultTransfer(sc);
       boolean readFinished;
       try {
-        readFinished = cb.handleRead(transfer);
+        readFinished = cb.handleRead(out);
       } catch (Exception ex) {
         readFinished = false;
         exceptionHandler.handleException(this, ex);
@@ -209,6 +246,15 @@ public class Channel implements Hostable {
 
   public int getReadTaskCount() {
     return this.readTasks.size();
+  }
+  
+  public void addCodec(Codec codec){
+    if(codec.hasEncoder()){
+      this.encodePipeline.addProcessor(codec.getEncoder());
+    }
+    if(codec.hasDecoder()){
+      this.decodePipeline.addProcessor(codec.getDecoder());
+    }
   }
 
 }
