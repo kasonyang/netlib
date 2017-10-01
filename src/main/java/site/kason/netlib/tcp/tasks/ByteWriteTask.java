@@ -9,19 +9,27 @@ import site.kason.netlib.tcp.WriteTask;
  */
 public class ByteWriteTask implements WriteTask {
 
-  private final IOBuffer buffer;
+  private final byte[] data;
 
-  public ByteWriteTask(byte[] data) {
-    buffer = IOBuffer.create(data.length);
-    buffer.push(data);
+  private int lastOffset;
+
+  private int offset;
+
+  public ByteWriteTask(byte[] data, int offset, int length) {
+    this.data = data;
+    this.offset = offset;
+    this.lastOffset = offset + length - 1;
   }
 
   @Override
   public boolean handleWrite(IOBuffer buffer) throws Exception {
-    //TODO impl
-    //transfer.write(buffer);
-    //return buffer.getReadableSize() <= 0;
-    throw new UnsupportedOperationException();
+    int remaining = lastOffset - offset + 1;
+    if (remaining > 0) {
+      int maxSize = Math.min(remaining, buffer.getWritableSize());
+      buffer.push(data, offset, maxSize);
+      offset+=maxSize;
+    }
+    return offset > lastOffset;
   }
-  
+
 }
