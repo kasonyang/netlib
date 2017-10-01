@@ -17,8 +17,8 @@ import site.kason.netlib.tcp.ConnectionHandler;
 import site.kason.netlib.tcp.ServerChannel;
 import site.kason.netlib.tcp.ReadTask;
 import site.kason.netlib.tcp.ExceptionHandler;
-import site.kason.netlib.tcp.WriteTask;
 import site.kason.netlib.tcp.pipeline.Codec;
+import site.kason.netlib.tcp.tasks.ByteWriteTask;
 
 public class ChannelHostTest {
 
@@ -38,8 +38,6 @@ public class ChannelHostTest {
     final ChannelHost atcp = ChannelHost.create();
     SocketAddress addr = new InetSocketAddress(port);
     final Channel client = atcp.createChannel();
-    final IOBuffer writeBuffer = IOBuffer.create(data.length);
-    writeBuffer.push(data);
     final ExceptionHandler exh = new ExceptionHandler() {
       @Override
       public void handleException(Channel ch, Exception ex) {
@@ -51,19 +49,7 @@ public class ChannelHostTest {
       @Override
       public void channelConnected(Channel ch) {
         log("client:connected");
-        client.write(new WriteTask() {
-          @Override
-          public boolean handleWrite(IOBuffer buffer) {
-            log("client:handling write");
-            buffer.push(writeBuffer);
-            int remaining = writeBuffer.getReadableSize();
-            if (remaining > 0) {
-              client.prepareWrite();
-            }
-            return remaining <= 0;
-          }
-
-        });
+        client.write(new ByteWriteTask(data, 0, data.length));
         client.read(new ReadTask() {
           @Override
           public boolean handleRead(IOBuffer b) {
