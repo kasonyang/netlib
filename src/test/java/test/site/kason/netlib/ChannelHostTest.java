@@ -2,48 +2,38 @@ package test.site.kason.netlib;
 
 import static org.junit.Assert.*;
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.net.ssl.SSLContext;
 
 import org.junit.Test;
 import site.kason.netlib.io.IOBuffer;
+import site.kason.netlib.ssl.SSLCodec;
 import site.kason.netlib.ssl.SSLContextFactory;
 import site.kason.netlib.tcp.AcceptHandler;
 import site.kason.netlib.tcp.ChannelHost;
 import site.kason.netlib.tcp.Channel;
 import site.kason.netlib.tcp.ConnectionHandler;
 import site.kason.netlib.tcp.ServerChannel;
-import site.kason.netlib.tcp.Transfer;
 import site.kason.netlib.tcp.ReadTask;
-import site.kason.netlib.ssl.SSLFilter;
 import site.kason.netlib.tcp.ExceptionHandler;
 import site.kason.netlib.tcp.WriteTask;
+import site.kason.netlib.tcp.pipeline.Codec;
 
 public class ChannelHostTest {
 
   @Test
   public void testSSL() throws Exception {
-    String keyStore = "sslclientkeys";
-    //String trustStore = "sslclientkeys";
-    String pwd = "net-lib";
-
-    SSLContext context = SSLContextFactory.create(keyStore, pwd);
-    SSLFilter clientFilter = new SSLFilter(context, true);
-    SSLFilter serverFilter = new SSLFilter(context, false);
     //SSLChannel svr = SSLChannelFactory.create(true,keyStore,trustStore,pwd);
-    doTest(9001, clientFilter, serverFilter);
+    doTest(9001, true);
   }
 
   @Test
-  public void test() throws IOException {
-    doTest(9002, null, null);
+  public void test() throws Exception {
+    doTest(9002, false);
   }
 
-  public void doTest(int port, final SSLFilter clientFilter, final SSLFilter serverFilter) throws IOException {
+  public void doTest(int port,final boolean useSSL) throws Exception {
     final byte[] data = new byte[]{3, 4, 5, 6, 7, 8, 9, 3, 7, 9, 3};
     final ChannelHost atcp = ChannelHost.create();
     SocketAddress addr = new InetSocketAddress(port);
@@ -103,8 +93,8 @@ public class ChannelHostTest {
       @Override
       public void accepted(Channel ch) {
         ch.setExceptionHandler(exh);
-        if (serverFilter != null) {
-          ch.installFilter(serverFilter);
+        if (useSSL) {
+          ch.addCodec(createSSLCodec(ch, false));
         }
         log("server accepted:" + ch.toString());
         //final IOBuffer readBuffer = IOBuffer.create(data.length);
@@ -134,12 +124,24 @@ public class ChannelHostTest {
 
     });
     client.connect(addr);
-    if (clientFilter != null) {
-      client.installFilter(clientFilter);
+    if (useSSL) {
+      client.addCodec(createSSLCodec(client, true));
     }
     atcp.listen();
     //server.close();
     client.close();
+  }
+  
+  private Codec createSSLCodec(Channel ch,boolean clientMode){
+    String keyStore = "sslclientkeys";
+    //String trustStore = "sslclientkeys";
+    String pwd = "net-lib";
+    try{
+    SSLContext context = SSLContextFactory.create(keyStore, pwd);
+    return new SSLCodec(ch,context, clientMode);
+    }catch(Exception ex){
+      throw new RuntimeException(ex);
+    }
   }
 
   private void log(String msg) {

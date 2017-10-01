@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import site.kason.netlib.io.IOBuffer;
+import site.kason.netlib.tcp.pipeline.Codec;
 import site.kason.netlib.tcp.pipeline.Pipeline;
 
 public class Channel implements Hostable {
@@ -246,13 +247,14 @@ public class Channel implements Hostable {
   public int getReadTaskCount() {
     return this.readTasks.size();
   }
-
-  public Pipeline getEncodePipeline() {
-    return encodePipeline;
-  }
-
-  public Pipeline getDecodePipeline() {
-    return decodePipeline;
+  
+  public void addCodec(Codec codec){
+    if(codec.hasEncoder()){
+      this.encodePipeline.addProcessor(codec.getEncoder());
+    }
+    if(codec.hasDecoder()){
+      this.decodePipeline.addProcessor(codec.getDecoder());
+    }
   }
 
 }
