@@ -163,9 +163,6 @@ class SSLSession {
     this.handshaking = false;
     channel.prepareRead();
     channel.prepareWrite();
-    channel.prepareRead();
-    channel.prepareWrite();
-    channel.prepareRead();
     //System.out.println("handshake finished.");
   }
 
