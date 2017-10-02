@@ -62,12 +62,18 @@ public class ChannelHostTest {
     client.setExceptionHandler(exh);
     client.setConnectionHandler(new ConnectionHandler() {
       @Override
-      public void channelConnected(Channel ch) {
+      public void channelConnected(final Channel ch) {
         log("client:connected");
         client.write(new ByteWriteTask(data, 0, data.length));
         client.read(new ReadTask() {
+          private int counter = 0;
           @Override
           public boolean handleRead(IOBuffer b) {
+            if(counter<3){//test prepareRead even if no new data arrived
+              counter++;
+              ch.prepareRead();
+              return false;
+            }
             int rlen = b.getReadableSize();
             if (rlen > 0) {
               log("client:read " + rlen + " bytes");

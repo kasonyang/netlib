@@ -3,6 +3,7 @@ package site.kason.netlib.tcp;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.SocketChannel;
 import java.util.LinkedList;
@@ -169,13 +170,17 @@ public class Channel implements Hostable {
       IOBuffer in = decodePipeline.getInBuffer();
       IOBuffer out = decodePipeline.getOutBuffer();
       ByteBuffer byteBuffer = ByteBuffer.wrap(in.array(), in.getWritePosition(), in.getWritableSize());
-      int rlen = sc.read(byteBuffer);
-      if(rlen==-1){
-        //TODO may lose data
-        this.close();
-        return;
+      try{
+        int rlen = sc.read(byteBuffer);
+        if(rlen==-1){
+          //TODO may lose data
+          this.close();
+          return;
+        }
+        in.setWritePosition(in.getWritePosition()+rlen);
+      }catch(ClosedChannelException ex){
+        //TODO handle closed
       }
-      in.setWritePosition(in.getWritePosition()+rlen);
       decodePipeline.process();
       if(out.getReadableSize()<=0){
         this.prepareRead();
@@ -254,6 +259,14 @@ public class Channel implements Hostable {
     if(codec.hasDecoder()){
       this.decodePipeline.addProcessor(codec.getDecoder());
     }
+  }
+  
+  public boolean isReadable(){
+    return this.decodePipeline.getOutBuffer().getReadableSize()>0;
+  }
+  
+  public boolean isWritable(){
+    return this.encodePipeline.getOutBuffer().getReadableSize()>0;
   }
 
 }
