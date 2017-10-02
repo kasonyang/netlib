@@ -70,14 +70,12 @@ public class ChannelHost implements Host {
     SocketChannel sc = (SocketChannel) key.channel();
     Channel ch = (Channel) channels.get(sc);
     if (key.isReadable()) {
-      if (ch.handleRead()) {
-        this.interest(ch, SelectionKey.OP_READ, false);
-      }
+      this.interest(ch, SelectionKey.OP_READ, false);
+      ch.handleRead();
     }
     if (key.isWritable()) {
-      if (ch.handleWrite()) {
-        this.interest(ch, SelectionKey.OP_WRITE, false);
-      }
+      this.interest(ch, SelectionKey.OP_WRITE, false);
+      ch.handleWrite();
     }
     if (key.isConnectable()) {
       this.interest(ch, SelectionKey.OP_CONNECT, false);
