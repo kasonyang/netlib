@@ -5,11 +5,14 @@ import static org.junit.Assert.*;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.Arrays;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.net.ssl.SSLContext;
 
 import org.junit.Test;
+import site.kason.netlib.codec.DeflateCodec;
 import site.kason.netlib.io.IOBuffer;
 import site.kason.netlib.ssl.SSLCodec;
 import site.kason.netlib.ssl.SSLContextFactory;
@@ -32,15 +35,36 @@ public class ChannelHostTest {
   @Test
   public void testSSL() throws Exception {
     //SSLChannel svr = SSLChannelFactory.create(true,keyStore,trustStore,pwd);
-    doTest(9001, true);
+    doTest(9001,new CodecFactory() {
+      @Override
+      public List<Codec> createCodecs(Channel ch) {
+        return Arrays.asList(createSSLCodec(ch, false));
+      }
+    },new CodecFactory() {
+      @Override
+      public List<Codec> createCodecs(Channel ch) {
+        return Arrays.asList(createSSLCodec(ch, true));
+      }
+    });
   }
 
   @Test
   public void test() throws Exception {
-    doTest(9002, false);
+    doTest(9002, null,null);
+  }
+  
+  @Test
+  public void testDeflate() throws Exception{
+    CodecFactory cf = new CodecFactory() {
+      @Override
+      public List<Codec> createCodecs(Channel ch) {
+        return Arrays.asList((Codec)new DeflateCodec());
+      }
+    };
+    doTest(9003,cf,cf);
   }
 
-  public void doTest(int port,final boolean useSSL) throws Exception {
+  public void doTest(int port, final CodecFactory serverCodecFactory,final CodecFactory clientCodecFactory) throws Exception {
     final byte[] data = new byte[]{3, 4, 5, 6, 7, 8, 9, 3, 7, 9, 3};
     final ChannelHost atcp = ChannelHost.create();
     SocketAddress addr = new InetSocketAddress(port);
@@ -105,8 +129,10 @@ public class ChannelHostTest {
       @Override
       public void accepted(Channel ch) {
         ch.setExceptionHandler(exh);
-        if (useSSL) {
-          ch.addCodec(createSSLCodec(ch, false));
+        if(serverCodecFactory!=null){
+          for(Codec c:serverCodecFactory.createCodecs(ch)){
+            ch.addCodec(c);
+          }
         }
         log("server accepted:" + ch.toString());
         //final IOBuffer readBuffer = IOBuffer.create(data.length);
@@ -137,8 +163,10 @@ public class ChannelHostTest {
 
     });
     client.connect(addr);
-    if (useSSL) {
-      client.addCodec(createSSLCodec(client, true));
+    if(clientCodecFactory!=null){
+      for(Codec c:clientCodecFactory.createCodecs(client)){
+        client.addCodec(c);
+      }
     }
     atcp.listen();
     //server.close();
