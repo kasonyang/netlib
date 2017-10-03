@@ -265,7 +265,7 @@ public class Channel implements Hostable {
       this.encodePipeline.addProcessor(codec.getEncoder());
     }
     if(codec.hasDecoder()){
-      this.decodePipeline.addProcessor(codec.getDecoder());
+      this.decodePipeline.addProcessor(0,codec.getDecoder());
     }
   }
   
