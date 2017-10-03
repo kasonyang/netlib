@@ -29,6 +29,8 @@ public class Channel implements Hostable {
   protected ConnectionHandler connectionHandler;
 
   private boolean closed = false;
+  
+  private boolean closePending = false;
 
   public ExceptionHandler DEFAULT_EXCEPTION_HANDLER = new ExceptionHandler() {
     @Override
@@ -72,6 +74,7 @@ public class Channel implements Hostable {
   }
 
   public void close() throws IOException {
+    this.closePending = false;
     if (this.closed) {
       return;
     }
@@ -174,18 +177,22 @@ public class Channel implements Hostable {
       try{
         int rlen = sc.read(byteBuffer);
         if(rlen==-1){
-          //TODO may lose data
-          this.close();
-          return;
+          this.closePending = true;
+        }else if(rlen>0){
+          in.setWritePosition(in.getWritePosition()+rlen);
         }
-        in.setWritePosition(in.getWritePosition()+rlen);
       }catch(ClosedChannelException ex){
-        //TODO handle closed
+        this.closePending = true;
       }
       decodePipeline.process();
-      if(out.getReadableSize()<=0){
-        this.prepareRead();
-        return;
+      if(out.getReadableSize()<=0){//no data for read
+        if(this.closePending){
+          this.close();
+          return;
+        }else{
+          this.prepareRead();
+          return;
+        }
       }
       List<ReadTask> readCallbacks = readTasks;
       if (readCallbacks.size() > 0) {
