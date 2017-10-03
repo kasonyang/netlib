@@ -58,8 +58,9 @@ public class Channel implements Hostable {
    * connect the channel to the remote a <b>connected</b> event will be trigger
    * if connect successfully or a <b>connectFailed</b> event will be trigger
    *
-   * @param remote
+   * @param remote the remote address to connect
    * @return true if no io exception occurs
+   * @throws IOException if some i/o error occurs
    */
   public boolean connect(SocketAddress remote) throws IOException {
     host.prepareConnect(this);
