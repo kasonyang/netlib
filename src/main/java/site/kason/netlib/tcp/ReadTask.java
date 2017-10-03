@@ -13,6 +13,6 @@ public interface ReadTask {
      * @param transfer
      * @return true if task is finished
      */
-    boolean handleRead(IOBuffer buffer) throws Exception;
+    boolean handleRead(Channel ch,IOBuffer buffer) throws Exception;
 
 }

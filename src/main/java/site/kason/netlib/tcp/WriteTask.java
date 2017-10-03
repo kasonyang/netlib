@@ -13,6 +13,6 @@ public interface WriteTask {
      * @param transfer
      * @return true if task is finished.
      */
-    boolean handleWrite(IOBuffer buffer) throws Exception;
+    boolean handleWrite(Channel ch,IOBuffer buffer) throws Exception;
 
 }

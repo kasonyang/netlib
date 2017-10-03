@@ -44,7 +44,7 @@ public class ChannelHostTest {
     final byte[] data = new byte[]{3, 4, 5, 6, 7, 8, 9, 3, 7, 9, 3};
     final ChannelHost atcp = ChannelHost.create();
     SocketAddress addr = new InetSocketAddress(port);
-    final Channel client = atcp.createChannel();
+    Channel client = atcp.createChannel();
     final ExceptionHandler exh = new ExceptionHandler() {
       @Override
       public void handleException(Channel ch, Exception ex) {
@@ -64,14 +64,14 @@ public class ChannelHostTest {
       @Override
       public void channelConnected(final Channel ch) {
         log("client:connected");
-        client.write(new ByteWriteTask(data, 0, data.length));
-        client.read(new ReadTask() {
+        ch.write(new ByteWriteTask(data, 0, data.length));
+        ch.read(new ReadTask() {
           private int counter = 0;
           @Override
-          public boolean handleRead(IOBuffer b) {
+          public boolean handleRead(Channel channel,IOBuffer b) {
             if(counter<3){//test prepareRead even if no new data arrived
               counter++;
-              ch.prepareRead();
+              channel.prepareRead();
               return false;
             }
             int rlen = b.getReadableSize();
@@ -103,7 +103,7 @@ public class ChannelHostTest {
     });
     ServerChannel server = atcp.createServerChannel(addr, new AcceptHandler() {
       @Override
-      public void accepted(final Channel ch) {
+      public void accepted(Channel ch) {
         ch.setExceptionHandler(exh);
         if (useSSL) {
           ch.addCodec(createSSLCodec(ch, false));
@@ -112,7 +112,7 @@ public class ChannelHostTest {
         //final IOBuffer readBuffer = IOBuffer.create(data.length);
         ch.read(new ReadTask() {
           @Override
-          public boolean handleRead(IOBuffer readBuffer) {
+          public boolean handleRead(Channel ch,IOBuffer readBuffer) {
             log("server read");
             int readSize = readBuffer.getReadableSize();
             log("server:read " + readSize + " bytes");

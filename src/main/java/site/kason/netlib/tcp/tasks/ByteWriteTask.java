@@ -1,6 +1,7 @@
 package site.kason.netlib.tcp.tasks;
 
 import site.kason.netlib.io.IOBuffer;
+import site.kason.netlib.tcp.Channel;
 import site.kason.netlib.tcp.WriteTask;
 
 /**
@@ -22,14 +23,18 @@ public class ByteWriteTask implements WriteTask {
   }
 
   @Override
-  public boolean handleWrite(IOBuffer buffer) throws Exception {
+  public boolean handleWrite(Channel ch,IOBuffer buffer) throws Exception {
     int remaining = lastOffset - offset + 1;
     if (remaining > 0) {
       int maxSize = Math.min(remaining, buffer.getWritableSize());
       buffer.push(data, offset, maxSize);
       offset+=maxSize;
     }
-    return offset > lastOffset;
+    boolean finished = offset > lastOffset;
+    if(!finished){
+      ch.prepareWrite();
+    }
+    return finished;
   }
 
 }

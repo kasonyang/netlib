@@ -144,7 +144,7 @@ public class Channel implements Hostable {
       WriteTask cb = writeCallbacks.get(0);
       boolean writeFinished;
       try {
-        writeFinished = cb.handleWrite(encodePipeline.getInBuffer());
+        writeFinished = cb.handleWrite(this,encodePipeline.getInBuffer());
       } catch (Exception ex) {
         writeFinished = false;
         exceptionHandler.handleException(this, ex);
@@ -190,7 +190,7 @@ public class Channel implements Hostable {
       if (readCallbacks.size() > 0) {
         ReadTask cb = readCallbacks.get(0);
         try {
-          boolean readFinished = cb.handleRead(out);
+          boolean readFinished = cb.handleRead(this,out);
           if (readFinished) {
             readCallbacks.remove(0);
           }
