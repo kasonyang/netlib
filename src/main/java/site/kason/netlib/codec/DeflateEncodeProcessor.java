@@ -10,10 +10,7 @@ import site.kason.netlib.tcp.pipeline.Processor;
  */
 public class DeflateEncodeProcessor implements Processor {
 
-  private final Deflater deflater;
-
   public DeflateEncodeProcessor() {
-    deflater = new Deflater();
   }
 
   @Override
@@ -30,7 +27,7 @@ public class DeflateEncodeProcessor implements Processor {
   public void process(IOBuffer in, IOBuffer out) {
     if(in.getReadableSize()<=0) return;
     if(out.getWritableSize()<=0) return;
-    deflater.reset();
+    Deflater deflater = new Deflater();
     deflater.setInput(in.array(),in.getReadPosition(),in.getReadableSize());
     deflater.finish();
     int oldTotalIn = deflater.getTotalIn();
