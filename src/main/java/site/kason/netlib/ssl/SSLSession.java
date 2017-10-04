@@ -14,7 +14,7 @@ import site.kason.netlib.tcp.Channel;
  *
  * @author Kason Yang
  */
-class SSLSession {
+public class SSLSession {
 
   private final Channel channel;
 
