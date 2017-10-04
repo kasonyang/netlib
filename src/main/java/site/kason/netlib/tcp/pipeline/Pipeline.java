@@ -104,18 +104,18 @@ public class Pipeline {
     } else {
       int inSizeRequired = ps[0].getMinInBufferSize();
       if (inSizeRequired > this.inBuffer.array().length) {
-        inBuffer = IOBuffer.create(inSizeRequired);
+        inBuffer = this.createBuffer(inSizeRequired);
       }
       this.processorInBuffers.add(inBuffer);
       this.processors.add(ps[0]);
       for (int i = 1; i < ps.length; i++) {
         int is = Math.min(ps[i].getMinInBufferSize(), ps[i - 1].getMinOutBufferSize());
-        IOBuffer ib = IOBuffer.create(is);
+        IOBuffer ib = this.createBuffer(is);
         this.processorInBuffers.add(ib);
         this.processorOutBuffers.add(ib);
         this.processors.add(ps[i]);
       }
-      outBuffer = IOBuffer.create(ps[psLen - 1].getMinOutBufferSize());
+      outBuffer =this.createBuffer(ps[psLen - 1].getMinOutBufferSize());
       this.processorOutBuffers.add(outBuffer);
     }
   }
