@@ -63,6 +63,21 @@ public class ChannelHostTest {
     };
     doTest(9003,cf,cf);
   }
+  
+  @Test
+  public void testDeflateAndSSL() throws Exception{
+    doTest(9004,new CodecFactory() {
+      @Override
+      public List<Codec> createCodecs(Channel ch) {
+        return Arrays.asList(createSSLCodec(ch, false),new DeflateCodec());
+      }
+    },new CodecFactory() {
+      @Override
+      public List<Codec> createCodecs(Channel ch) {
+        return Arrays.asList(createSSLCodec(ch, true),new DeflateCodec());
+      }
+    });
+  }
 
   public void doTest(int port, final CodecFactory serverCodecFactory,final CodecFactory clientCodecFactory) throws Exception {
     final byte[] data = new byte[]{3, 4, 5, 6, 7, 8, 9, 3, 7, 9, 3};
