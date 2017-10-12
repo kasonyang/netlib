@@ -16,6 +16,10 @@ public class ByteWriteTask implements WriteTask {
 
   private int offset;
 
+  public ByteWriteTask(byte[] data) {
+    this(data,0,data.length);
+  }
+
   public ByteWriteTask(byte[] data, int offset, int length) {
     this.data = data;
     this.offset = offset;
