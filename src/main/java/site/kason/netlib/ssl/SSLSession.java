@@ -8,144 +8,170 @@ import javax.net.ssl.SSLEngineResult.HandshakeStatus;
 import javax.net.ssl.SSLException;
 import site.kason.netlib.io.BufferUnderflowException;
 import site.kason.netlib.io.IOBuffer;
-import site.kason.netlib.tcp.BufferTransfer;
 import site.kason.netlib.tcp.Channel;
-import site.kason.netlib.tcp.Transfer;
 
 /**
  *
  * @author Kason Yang
  */
-class SSLSession {
+public class SSLSession {
 
-    private final Channel channel;
+  private final Channel channel;
 
-    private final BufferTransfer bufferTransfer;
+  private final SSLEngine sslEngine;
 
-    private final SSLEngine sslEngine;
+  private boolean handshaking;
 
-    private boolean handshaking;
+  private boolean handshaked;
 
-    private boolean handshaked;
+  private boolean finishHandshakePending = false;
 
-    private final IOBuffer handshakeWriteBuffer;
+  private final IOBuffer handshakeWriteBuffer;
 
-    private final IOBuffer handshakeReadBuffer;
-    
-    private final ByteBuffer inNetBuffer;
-    
-    private final ByteBuffer inAppBuffer;
-    
-    private final ByteBuffer outNetBuffer;
-    
-    private final ByteBuffer outAppBuffer;
+  private final IOBuffer handshakeReadBuffer;
 
-    public SSLSession(Channel channel, BufferTransfer bufferTransfer,SSLEngine sslEngine) {
-        this.channel = channel;
-        this.bufferTransfer = bufferTransfer;
-        this.sslEngine = sslEngine;
-        javax.net.ssl.SSLSession sess = sslEngine.getSession();
-        int maxPacketSize = sess.getPacketBufferSize();
-        this.handshakeReadBuffer = IOBuffer.create(maxPacketSize);
-        this.handshakeWriteBuffer = IOBuffer.create(maxPacketSize);
-        int maxAppSize = sess.getApplicationBufferSize();
-        this.inNetBuffer = ByteBuffer.allocate(maxPacketSize);
-        this.outNetBuffer = ByteBuffer.allocate(maxPacketSize);
-        this.inAppBuffer = ByteBuffer.allocate(maxAppSize);
-        this.outAppBuffer = ByteBuffer.allocate(maxAppSize);
+  public SSLSession(Channel channel, SSLEngine sslEngine) {
+    this.channel = channel;
+    this.sslEngine = sslEngine;
+    javax.net.ssl.SSLSession sess = sslEngine.getSession();
+    int maxPacketSize = sess.getPacketBufferSize();
+    this.handshakeReadBuffer = IOBuffer.create(maxPacketSize);
+    this.handshakeWriteBuffer = IOBuffer.create(maxPacketSize);
+
+  }
+
+  public Channel getChannel() {
+    return channel;
+  }
+
+  public boolean isHandshaked() {
+    return this.handshaked;
+  }
+
+  public void handleRead(IOBuffer in, IOBuffer out) throws SSLException, IOException {
+    if (this.isHandshaked()) {
+      this.decrypt(in, out);
+    } else {
+      this.handshakeRead(in);
     }
+  }
 
-    public Channel getChannel() {
-        return channel;
+  public void handleWrite(IOBuffer in, IOBuffer out) throws SSLException, IOException {
+    if (this.isHandshaked()) {
+      this.encrypt(in, out);
+    } else {
+      this.handshakeWrite(out);
     }
+  }
 
-    public BufferTransfer getBufferTransfer() {
-        return bufferTransfer;
+  private void handshakeRead(IOBuffer in) throws IOException {
+    //System.out.println("handling unwrap:" + channel);
+    //this.readToBuffer(transfer);
+    this.handshakeReadBuffer.compact();
+    this.handshakeReadBuffer.push(in);
+    if (this.finishHandshakePending) {
+      this.finishHandshake();
+    } else {
+      this.prepareNextOperationOfHandshake(sslEngine.getHandshakeStatus());
     }
+  }
 
-    public boolean isHandshaked() {
-        return this.handshaked;
+  private void handshakeWrite(IOBuffer out) throws SSLException, IOException {
+    //System.out.println("handling wrap:" + channel);
+    this.handshakeWriteBuffer.compact();
+    out.push(this.handshakeWriteBuffer);
+    if (this.finishHandshakePending) {
+      this.finishHandshake();
+    } else {
+      this.prepareNextOperationOfHandshake(sslEngine.getHandshakeStatus());
     }
+  }
 
-    public void handshakeUnwrap(Transfer transfer) throws IOException {
-        handshakeReadBuffer.compact();
-        transfer.read(handshakeReadBuffer);
-        inNetBuffer.reset();
-        int maxSize = Math.min(handshakeReadBuffer.getReadableSize(), inNetBuffer.limit());
-        handshakeReadBuffer.peek(inNetBuffer.array(), 0, maxSize);
-        inNetBuffer.position(0).limit(maxSize);
-        SSLEngineResult result = sslEngine.unwrap(inNetBuffer, inAppBuffer);
-        HandshakeStatus hs = result.getHandshakeStatus();
-        int consumed = result.bytesConsumed();
-        handshakeReadBuffer.skip(consumed);
-        this.prepareNextOperationOfHandshake(transfer,hs);
+  private void prepareNextOperationOfHandshake(HandshakeStatus hs) throws IOException {
+    ByteBuffer readBuffer = ByteBuffer.wrap(handshakeReadBuffer.array(), handshakeReadBuffer.getReadPosition(), handshakeReadBuffer.getReadableSize());
+    ByteBuffer writeBuffer = ByteBuffer.wrap(handshakeWriteBuffer.array(), handshakeWriteBuffer.getWritePosition(), handshakeWriteBuffer.getWritableSize());
+    if (hs == HandshakeStatus.NEED_TASK) {
+      Runnable runnable;
+      while ((runnable = sslEngine.getDelegatedTask()) != null) {
+        runnable.run();
+      }
+      hs = sslEngine.getHandshakeStatus();
+      prepareNextOperationOfHandshake(hs);
+    } else if (hs == HandshakeStatus.NEED_WRAP) {
+      SSLEngineResult wrapResult = sslEngine.wrap(readBuffer, writeBuffer);
+      this.handleResult(wrapResult);
+    } else if (hs == HandshakeStatus.NEED_UNWRAP) {
+      SSLEngineResult unwrapResult = sslEngine.unwrap(readBuffer, writeBuffer);
+      this.handleResult(unwrapResult);
+    } else if (hs == HandshakeStatus.FINISHED) {
+      this.finishHandshakePending = true;
+      channel.prepareRead();
+      channel.prepareWrite();
+      //System.out.println("handling FINISHED");
+    } else if (hs == HandshakeStatus.NOT_HANDSHAKING) {
+      sslEngine.beginHandshake();
+      this.prepareNextOperationOfHandshake(sslEngine.getHandshakeStatus());
+    } else {
+      throw new RuntimeException("unknown handshake status:" + hs);
     }
+  }
 
-    public void handshakeWrap(Transfer transfer) throws SSLException, IOException {
-        outNetBuffer.reset();
-        SSLEngineResult result = sslEngine.wrap(ByteBuffer.allocate(0), outNetBuffer);
-        HandshakeStatus hs = result.getHandshakeStatus();
-        outNetBuffer.flip();
-        handshakeWriteBuffer.push(outNetBuffer.array(), 0, outNetBuffer.limit());
-        //TODO maybe not written
-        transfer.write(handshakeWriteBuffer);
-        this.prepareNextOperationOfHandshake(transfer,hs);
+  private void handleResult(SSLEngineResult result) throws IOException {
+    int byteConsumed = result.bytesConsumed();
+    int byteProduced = result.bytesProduced();
+    if (byteConsumed > 0) {
+      handshakeReadBuffer.skip(byteConsumed);
     }
+    if (byteProduced > 0) {
+      handshakeWriteBuffer.setWritePosition(handshakeWriteBuffer.getWritePosition() + byteProduced);
+      channel.prepareWrite();
+    }
+    SSLEngineResult.Status status = result.getStatus();
+    if (status == SSLEngineResult.Status.OK) {
+      this.prepareNextOperationOfHandshake(result.getHandshakeStatus());
+    } else if (status == SSLEngineResult.Status.BUFFER_OVERFLOW) {
+      channel.prepareWrite();
+    } else if (status == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
+      channel.prepareRead();
+    } else {
+      throw new RuntimeException("unexpected status:" + status);
+    }
+  }
 
-    private void prepareNextOperationOfHandshake(Transfer transfer,HandshakeStatus hs) throws IOException {
-        if (hs == HandshakeStatus.NEED_TASK) {
-            Runnable runnable;
-            while ((runnable = sslEngine.getDelegatedTask()) != null) {
-                runnable.run();
-            }
-            hs = sslEngine.getHandshakeStatus();
-            prepareNextOperationOfHandshake(transfer,hs);
-        } else if (hs == HandshakeStatus.NEED_WRAP) {
-            if(handshakeWriteBuffer.getReadableSize()>0){
-                this.handshakeWrap(transfer);
-            }else{
-                channel.prepareWrite();
-            }
-        } else if (hs == HandshakeStatus.NEED_UNWRAP) {
-            if(handshakeReadBuffer.getReadableSize()>0){
-                this.handshakeUnwrap(transfer);
-            }else{
-                channel.prepareRead();
-            }
-        } else if (hs == HandshakeStatus.FINISHED) {
-            this.handshaked = true;
-            this.handshaking = false;
-            channel.prepareRead();
-            channel.prepareWrite();
-        }
-    }
+  private void encrypt(IOBuffer source, IOBuffer dest) throws SSLException, BufferUnderflowException {
+    ByteBuffer srcBf = ByteBuffer.wrap(source.array(), source.getReadPosition(), source.getReadableSize());
+    ByteBuffer outBf = ByteBuffer.wrap(dest.array(), dest.getWritePosition(), dest.getWritableSize());
+    SSLEngineResult res = sslEngine.wrap(srcBf, outBf);
+    int byteConsumed = res.bytesConsumed();
+    int byteProduced = res.bytesProduced();
+    source.skip(byteConsumed);
+    dest.setWritePosition(dest.getWritePosition() + byteProduced);
+  }
 
-    public void encrypt(IOBuffer source, IOBuffer dest) throws SSLException,BufferUnderflowException {
-        inNetBuffer.compact();
-        inAppBuffer.compact();
-        int maxSize = Math.min(inAppBuffer.remaining(), source.getReadableSize());
-        if(maxSize<=0) return;
-        int oldAppPosition = inAppBuffer.position();
-        source.poll(inAppBuffer.array(), oldAppPosition, maxSize);
-        inAppBuffer.position(0).limit(oldAppPosition + maxSize);
-        sslEngine.wrap(inAppBuffer , inNetBuffer);
-        inNetBuffer.flip();
-        int writeSize = Math.min(dest.getWritableSize(),inNetBuffer.limit());
-        dest.push(inNetBuffer.array() , 0 , writeSize);
-        inNetBuffer.position(writeSize);
-    }
+  private void decrypt(IOBuffer source, IOBuffer dest) throws SSLException {
+    ByteBuffer srcBf = ByteBuffer.wrap(source.array(), source.getReadPosition(), source.getReadableSize());
+    ByteBuffer outBf = ByteBuffer.wrap(dest.array(), dest.getWritePosition(), dest.getWritableSize());
+    SSLEngineResult res = sslEngine.unwrap(srcBf, outBf);
+    int byteConsumed = res.bytesConsumed();
+    int byteProduced = res.bytesProduced();
+    source.skip(byteConsumed);
+    dest.setWritePosition(dest.getWritePosition() + byteProduced);
+  }
 
-    public void decrypt(IOBuffer source, IOBuffer dest) throws SSLException {
-        outAppBuffer.compact();
-        outNetBuffer.compact();
-        int maxSize = Math.min(source.getReadableSize() , outAppBuffer.remaining());
-        source.poll(outAppBuffer.array(),outAppBuffer.position(),maxSize);
-        outAppBuffer.position(outAppBuffer.position()+maxSize);
-        outAppBuffer.flip();
-        sslEngine.unwrap(outAppBuffer, outNetBuffer);
-        outNetBuffer.flip();
-        int writeSize = Math.min(outNetBuffer.limit(),dest.getWritableSize());
-        dest.push(outNetBuffer.array(), 0,writeSize);
-    }
+  private void finishHandshake() {
+    this.handshaked = true;
+    this.handshaking = false;
+    channel.prepareRead();
+    channel.prepareWrite();
+    //System.out.println("handshake finished.");
+  }
+
+  public int getApplicationBufferSize() {
+    return this.sslEngine.getSession().getApplicationBufferSize();
+  }
+
+  public int getPacketBufferSize() {
+    return this.sslEngine.getSession().getPacketBufferSize();
+  }
 
 }

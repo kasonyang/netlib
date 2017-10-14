@@ -2,6 +2,7 @@ package site.kason.netlib.tcp;
 
 import java.io.IOException;
 import java.net.SocketAddress;
+import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.SocketChannel;
@@ -9,16 +10,15 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import site.kason.netlib.io.IOBuffer;
+import site.kason.netlib.tcp.pipeline.Codec;
+import site.kason.netlib.tcp.pipeline.Pipeline;
 
 public class Channel implements Hostable {
 
   Host host;
 
   SocketChannel socketChannel;
-
-  int writeRequests = 0;
-
-  int readRequests = 0;
 
   protected final List<WriteTask> writeTasks = new LinkedList();
 
@@ -29,6 +29,8 @@ public class Channel implements Hostable {
   protected ConnectionHandler connectionHandler;
 
   private boolean closed = false;
+  
+  private boolean closePending = false;
 
   public ExceptionHandler DEFAULT_EXCEPTION_HANDLER = new ExceptionHandler() {
     @Override
@@ -44,6 +46,10 @@ public class Channel implements Hostable {
   };
 
   private ExceptionHandler exceptionHandler = DEFAULT_EXCEPTION_HANDLER;
+  
+  private final Pipeline encodePipeline = new Pipeline();
+  
+  private final Pipeline decodePipeline = new Pipeline();
 
   protected Channel(SocketChannel socketChannel, Host host) {
     this.socketChannel = socketChannel;
@@ -54,8 +60,9 @@ public class Channel implements Hostable {
    * connect the channel to the remote a <b>connected</b> event will be trigger
    * if connect successfully or a <b>connectFailed</b> event will be trigger
    *
-   * @param remote
+   * @param remote the remote address to connect
    * @return true if no io exception occurs
+   * @throws IOException if some i/o error occurs
    */
   public boolean connect(SocketAddress remote) throws IOException {
     host.prepareConnect(this);
@@ -67,6 +74,7 @@ public class Channel implements Hostable {
   }
 
   public void close() throws IOException {
+    this.closePending = false;
     if (this.closed) {
       return;
     }
@@ -79,6 +87,7 @@ public class Channel implements Hostable {
         connectionHandler.channelClosed(this);
       }
     } finally {
+      host.closeChannel(this);
       socketChannel.close();
     }
   }
@@ -117,20 +126,29 @@ public class Channel implements Hostable {
   }
 
   public synchronized void prepareWrite() {
-    this.writeRequests++;
     host.prepareWrite(this);
   }
 
-  public boolean handleWrite() {
-    this.writeRequests--;
+  protected void handleWrite() {
     SocketChannel sc = this.socketChannel;
-    List<WriteTask> writeCallbacks = this.writeTasks;
-    if (writeCallbacks.size() > 0) {
+    IOBuffer out = encodePipeline.getOutBuffer();
+    try {
+      encodePipeline.process();
+      if(out.getReadableSize()>0){
+        ByteBuffer byteBuffer = ByteBuffer.wrap(out.array(),out.getReadPosition(),out.getReadableSize());
+        int wlen = sc.write(byteBuffer);
+        out.skip(wlen);
+        this.prepareWrite();
+        return;
+      }
+      List<WriteTask> writeCallbacks = this.writeTasks;
+      if(writeCallbacks.isEmpty()){
+        return;
+      }
       WriteTask cb = writeCallbacks.get(0);
-      DefaultTransfer transfer = new DefaultTransfer(sc);
       boolean writeFinished;
       try {
-        writeFinished = cb.handleWrite(transfer);
+        writeFinished = cb.handleWrite(this,encodePipeline.getInBuffer());
       } catch (Exception ex) {
         writeFinished = false;
         exceptionHandler.handleException(this, ex);
@@ -138,34 +156,64 @@ public class Channel implements Hostable {
       if (writeFinished) {
         writeCallbacks.remove(0);
       }
+      this.prepareWrite();
+    } catch (IOException ex) {
+      exceptionHandler.handleException(this, ex);
+    } catch (RuntimeException ex){
+      exceptionHandler.handleException(this, ex);
     }
-    return writeRequests <= 0;
   }
 
   public synchronized void prepareRead() {
-    this.readRequests++;
     host.prepareRead(this);
   }
 
-  public boolean handleRead() {
-    this.readRequests--;
-    SocketChannel sc = this.socketChannel;
-    List<ReadTask> readCallbacks = readTasks;
-    if (readCallbacks.size() > 0) {
-      ReadTask cb = readCallbacks.get(0);
-      DefaultTransfer transfer = new DefaultTransfer(sc);
-      boolean readFinished;
-      try {
-        readFinished = cb.handleRead(transfer);
-      } catch (Exception ex) {
-        readFinished = false;
-        exceptionHandler.handleException(this, ex);
+  protected void handleRead() {
+    try {
+      SocketChannel sc = this.socketChannel;
+      IOBuffer in = decodePipeline.getInBuffer();
+      IOBuffer out = decodePipeline.getOutBuffer();
+      ByteBuffer byteBuffer = ByteBuffer.wrap(in.array(), in.getWritePosition(), in.getWritableSize());
+      try{
+        int rlen = sc.read(byteBuffer);
+        if(rlen==-1){
+          this.closePending = true;
+        }else if(rlen>0){
+          in.setWritePosition(in.getWritePosition()+rlen);
+        }
+      }catch(ClosedChannelException ex){
+        this.closePending = true;
       }
-      if (readFinished) {
-        readCallbacks.remove(0);
+      decodePipeline.process();
+      if(out.getReadableSize()<=0){//no data for read
+        if(this.closePending){
+          this.close();
+          return;
+        }else{
+          this.prepareRead();
+          return;
+        }
       }
+      List<ReadTask> readCallbacks = readTasks;
+      if (readCallbacks.size() > 0) {
+        ReadTask cb = readCallbacks.get(0);
+        try {
+          boolean readFinished = cb.handleRead(this,out);
+          if (readFinished) {
+            readCallbacks.remove(0);
+          }
+          if(!readCallbacks.isEmpty()){
+            this.prepareRead();
+          } 
+        } catch (Exception ex) {
+          exceptionHandler.handleException(this, ex);
+        }
+      }
+    } catch (IOException ex) {
+      this.exceptionHandler.handleException(this, ex);
+    } catch (RuntimeException ex){
+      this.exceptionHandler.handleException(this, ex);
     }
-    return this.readRequests <= 0;
   }
 
   public synchronized void prepareConnect() {
@@ -181,7 +229,8 @@ public class Channel implements Hostable {
   }
 
   public void installFilter(ChannelFilter filter) {
-    filter.install(this);
+    this.filters.add(filter);
+    filter.installed(this);
   }
 
   public void setExceptionHandler(ExceptionHandler exceptionHandler) {
@@ -209,6 +258,23 @@ public class Channel implements Hostable {
 
   public int getReadTaskCount() {
     return this.readTasks.size();
+  }
+  
+  public void addCodec(Codec codec){
+    if(codec.hasEncoder()){
+      this.encodePipeline.addProcessor(codec.getEncoder());
+    }
+    if(codec.hasDecoder()){
+      this.decodePipeline.addProcessor(0,codec.getDecoder());
+    }
+  }
+  
+  public boolean isReadable(){
+    return this.decodePipeline.getOutBuffer().getReadableSize()>0;
+  }
+  
+  public boolean isWritable(){
+    return this.encodePipeline.getOutBuffer().getReadableSize()>0;
   }
 
 }

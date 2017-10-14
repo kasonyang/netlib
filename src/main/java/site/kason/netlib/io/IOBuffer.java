@@ -43,6 +43,12 @@ public class IOBuffer {
     public void push(byte[] data) {
         push0(data, 0, data.length);
     }
+    
+    public void push(IOBuffer src){
+      int size = Math.min(this.getWritableSize(), src.getReadableSize());
+      this.push(src.array(),src.getReadPosition(),size);
+      src.skip(size);
+    }
 
     public void peek(byte[] dest, int offset, int length) {
         int usedSize = this.getReadableSize();
@@ -144,5 +150,10 @@ public class IOBuffer {
         }
         this.writeOffset = newPosition;
     }
+
+  @Override
+  public String toString() {
+    return "IOBuffer(" + "limit=" + limit + ", readOffset=" + readOffset + ", writeOffset=" + writeOffset + ')';
+  }
 
 }

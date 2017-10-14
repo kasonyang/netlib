@@ -4,9 +4,6 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SocketChannel;
-import java.util.HashSet;
-import java.util.Set;
-import site.kason.netlib.io.IOBuffer;
 
 public interface Host {
     //public void writeBufferChanged(Channel ch,IOBuffer writeBuffer);
@@ -26,6 +23,8 @@ public interface Host {
     public Channel createChannel(SocketChannel sc) throws ClosedChannelException;
     
     public ServerChannel createServerChannel(SocketAddress endpoint, AcceptHandler acceptHandler) throws IOException;
+    
+    public void closeChannel(Hostable ch);
     
 
 }

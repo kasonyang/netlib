@@ -9,8 +9,12 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Queue;
 import java.util.Set;
 
 public class ChannelHost implements Host {
@@ -22,6 +26,10 @@ public class ChannelHost implements Host {
   private HashMap<SelectableChannel, Hostable> channels = new HashMap();
 
   private HashMap<Hostable, SelectableChannel> socketChannels = new HashMap();
+  
+  private List<Channel> readRequiredList = new LinkedList();
+  
+  private List<Channel> writeRequiredList = new LinkedList();
 
   //private ByteBuffer readBuffer = ByteBuffer.allocate(40960);
   public static ChannelHost create() throws IOException {
@@ -36,12 +44,22 @@ public class ChannelHost implements Host {
 
   @Override
   public void prepareWrite(Channel ch) {
-    this.interest(ch, SelectionKey.OP_WRITE, true);
+    if(ch.isWritable()){
+      this.writeRequiredList.add(ch);
+      selector.wakeup();
+    }else{
+      this.interest(ch, SelectionKey.OP_WRITE, true);
+    }
   }
 
   @Override
   public void prepareRead(Channel ch) {
-    this.interest(ch, SelectionKey.OP_READ, true);
+    if(ch.isReadable()){
+      this.readRequiredList.add(ch);
+      selector.wakeup();
+    }else{
+      this.interest(ch, SelectionKey.OP_READ, true);
+    }
   }
 
   protected ChannelHost() throws IOException {
@@ -51,14 +69,19 @@ public class ChannelHost implements Host {
   private void interest(Channel ch, int key, boolean interest) {
     SocketChannel sc = ch.socketChannel();
     SelectionKey selectionKey = sc.keyFor(selector);
-    int ops = selectionKey.interestOps();
-    if (interest) {
-      ops |= key;
-    } else {
-      ops &= ~key;
+    try{
+      int ops = selectionKey.interestOps();
+      if (interest) {
+        ops |= key;
+      } else {
+        ops &= ~key;
+      }
+      selectionKey.interestOps(ops);
+      selector.wakeup();
+    }catch(CancelledKeyException ex){
+      //ignore it
     }
-    selectionKey.interestOps(ops);
-    selector.wakeup();
+    
   }
 
   public void stopListen() {
@@ -70,14 +93,12 @@ public class ChannelHost implements Host {
     SocketChannel sc = (SocketChannel) key.channel();
     Channel ch = (Channel) channels.get(sc);
     if (key.isReadable()) {
-      if (ch.handleRead()) {
-        this.interest(ch, SelectionKey.OP_READ, false);
-      }
+      this.interest(ch, SelectionKey.OP_READ, false);
+      ch.handleRead();
     }
     if (key.isWritable()) {
-      if (ch.handleWrite()) {
-        this.interest(ch, SelectionKey.OP_WRITE, false);
-      }
+      this.interest(ch, SelectionKey.OP_WRITE, false);
+      ch.handleWrite();
     }
     if (key.isConnectable()) {
       this.interest(ch, SelectionKey.OP_CONNECT, false);
@@ -111,6 +132,16 @@ public class ChannelHost implements Host {
       } catch (IOException e1) {
         throw new RuntimeException(e1);
       }
+      List<Channel> readList = new ArrayList(this.readRequiredList);
+      this.readRequiredList.clear();
+      for(Channel r:readList){
+        r.handleRead();
+      }
+      List<Channel> writeList = new ArrayList(this.writeRequiredList);
+      this.writeRequiredList.clear();
+      for(Channel w:writeList){
+        w.handleWrite();
+      }
       Set<SelectionKey> selectionKeys = selector.selectedKeys();
       Iterator<SelectionKey> iter = selectionKeys.iterator();
       while (iter.hasNext()) {
@@ -119,7 +150,7 @@ public class ChannelHost implements Host {
         if (!key.isValid()) {
           continue;
         }
-
+        
         if (key.isAcceptable()) {
           ServerSocketChannel nssc = (ServerSocketChannel) key.channel();
           try {
@@ -133,7 +164,11 @@ public class ChannelHost implements Host {
             throw new RuntimeException(e);
           }
         } else {
-          this.onSocketChannelKey(key);
+          try{
+            this.onSocketChannelKey(key);
+          }catch(CancelledKeyException ex){
+            
+          }
         }
       }
     }
@@ -152,6 +187,14 @@ public class ChannelHost implements Host {
         sc.register(selector, 0);
       }
     }
+  }
+  
+  @Override
+  public void closeChannel(Hostable channel){
+    SelectableChannel sc = channel.getSelectableChannel();
+    channels.remove(sc);
+    socketChannels.remove(channel);
+    sc.keyFor(selector).cancel();
   }
 
   @Override

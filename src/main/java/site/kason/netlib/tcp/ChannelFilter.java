@@ -10,6 +10,6 @@ public interface ChannelFilter {
 
     WriteTask filterWrite(WriteTask task);
     
-    void install(Channel ch);
+    void installed(Channel ch);
 
 }
