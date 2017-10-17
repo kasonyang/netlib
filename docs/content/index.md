@@ -6,9 +6,11 @@ status=published
 ~~~~~~
 
 # Overview
-Netlib is a async socket framework library for java.
+Netlib is a asynchronous socket framework for java.
 
 # Installation
+
+![Maven Central](https://img.shields.io/maven-central/v/site.kason/netlib.svg)
 
 gradle:
 
@@ -79,5 +81,7 @@ gradle:
     };
     client.setExceptionHandler(handler);
 
+## Examples
 
+Examples could be found here:[https://github.com/kasonyang/netlib-example](https://github.com/kasonyang/netlib-example)
 
