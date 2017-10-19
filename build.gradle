@@ -9,7 +9,7 @@ dependencies {
 sourceCompatibility = JavaVersion.toVersion("1.6")
 targetCompatibility = JavaVersion.toVersion("1.6")
 
-apply from:'maven-publish.gradle'
+apply from:'gradle/maven-publish.gradle'
 
 apply plugin: 'jacoco'
 jacocoTestReport {
