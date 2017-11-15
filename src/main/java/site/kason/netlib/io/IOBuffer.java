@@ -104,7 +104,9 @@ public class IOBuffer {
   public void compact() {
     if (readOffset > 0) {
       int dataSize = this.getReadableSize();
-      System.arraycopy(byteBuffer, readOffset, byteBuffer, 0, dataSize);
+      if (dataSize > 0){
+        System.arraycopy(byteBuffer, readOffset, byteBuffer, 0, dataSize);
+      }
       readOffset = 0;
       writeOffset = dataSize;
     }
