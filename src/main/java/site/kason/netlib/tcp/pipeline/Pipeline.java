@@ -36,6 +36,7 @@ public class Pipeline {
     boolean produced = true;
     while(produced){
       produced = false;
+      inBuffer.compact();
       for (int i = 0; i < processors.size(); i++) {
         IOBuffer in = processorInBuffers.get(i);
         IOBuffer out = processorOutBuffers.get(i);
@@ -46,7 +47,6 @@ public class Pipeline {
         if(written>0){
           produced = true;
         }
-        in.compact();
       }
     }
   }
