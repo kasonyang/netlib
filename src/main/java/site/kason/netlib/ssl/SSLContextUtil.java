@@ -18,17 +18,29 @@ import javax.net.ssl.TrustManagerFactory;
 
 public class SSLContextUtil {
 
+  public static final String SSL = "SSL",
+          SSL_2 = "SSLv2",
+          SSL_3 = "SSLv3",
+          TLS = "TLS",
+          TLS_1 = "TLSv1",
+          TLS_1_1 = "TLSv1.1",
+          TLS_1_2 = "TLSv1.2";
+
   public static SSLContext createFromKeyStoreFile(String file, String pwd) throws KeyManagementException, IOException, KeyStoreException, NoSuchAlgorithmException, CertificateException, UnrecoverableKeyException {
+    return createFromKeyStoreFile(file, pwd, TLS_1);
+  }
+
+  public static SSLContext createFromKeyStoreFile(String file, String pwd, String sslProtocol) throws KeyManagementException, IOException, KeyStoreException, NoSuchAlgorithmException, CertificateException, UnrecoverableKeyException {
     KeyStore ks = createKeyStore(file, pwd);
     KeyManagerFactory kmf = createKeyManager(ks, pwd);
     TrustManagerFactory tmf = createTrustManagerFactory(ks);
-    return create(kmf.getKeyManagers(), tmf.getTrustManagers());
+    return create(kmf.getKeyManagers(), tmf.getTrustManagers(), sslProtocol);
   }
 
-  public static SSLContext create(KeyManager[] keyManagers, TrustManager[] trustManagers) throws KeyManagementException {
+  public static SSLContext create(KeyManager[] keyManagers, TrustManager[] trustManagers, String sslProtocol) throws KeyManagementException {
     SSLContext sslCtx;
     try {
-      sslCtx = SSLContext.getInstance("TLS");
+      sslCtx = SSLContext.getInstance(sslProtocol);
     } catch (NoSuchAlgorithmException e) {
       throw new RuntimeException(e);
     }
