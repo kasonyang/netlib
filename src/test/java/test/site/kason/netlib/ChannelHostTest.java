@@ -15,7 +15,7 @@ import org.junit.Test;
 import site.kason.netlib.codec.DeflateCodec;
 import site.kason.netlib.io.IOBuffer;
 import site.kason.netlib.ssl.SSLCodec;
-import site.kason.netlib.ssl.SSLContextFactory;
+import site.kason.netlib.ssl.SSLContextUtil;
 import site.kason.netlib.tcp.AcceptHandler;
 import site.kason.netlib.tcp.ChannelHost;
 import site.kason.netlib.tcp.Channel;
@@ -34,7 +34,7 @@ public class ChannelHostTest {
 
   @Test
   public void testSSL() throws Exception {
-    //SSLChannel svr = SSLChannelFactory.create(true,keyStore,trustStore,pwd);
+    //SSLChannel svr = SSLChannelFactory.createFromKeyStoreFile(true,keyStore,trustStore,pwd);
     doTest(9001,new CodecFactory() {
       @Override
       public List<Codec> createCodecs(Channel ch) {
@@ -146,7 +146,7 @@ public class ChannelHostTest {
           }
         }
         log("server accepted:" + ch.toString());
-        //final IOBuffer readBuffer = IOBuffer.create(data.length);
+        //final IOBuffer readBuffer = IOBuffer.createFromKeyStoreFile(data.length);
         ch.read(new ReadTask() {
           @Override
           public boolean handleRead(Channel ch,IOBuffer readBuffer) {
@@ -189,7 +189,7 @@ public class ChannelHostTest {
     //String trustStore = "sslclientkeys";
     String pwd = "net-lib";
     try{
-    SSLContext context = SSLContextFactory.create(keyStore, pwd);
+    SSLContext context = SSLContextUtil.createFromKeyStoreFile(keyStore, pwd);
     return new SSLCodec(ch,context, clientMode);
     }catch(Exception ex){
       throw new RuntimeException(ex);
