@@ -33,15 +33,19 @@ public class SSLContextUtil {
   }
 
   public static SSLContext createFromKeyStoreFile(File file, String pwd, String sslProtocol) throws KeyManagementException, IOException, KeyStoreException, NoSuchAlgorithmException, CertificateException, UnrecoverableKeyException {
-    FileInputStream fis  = new FileInputStream(file);
-    try{
-      KeyStore ks = createKeyStore(fis, pwd);
-      KeyManagerFactory kmf = createKeyManager(ks, pwd);
-      TrustManagerFactory tmf = createTrustManagerFactory(ks);
-      return create(kmf.getKeyManagers(), tmf.getTrustManagers(), sslProtocol);
+    FileInputStream fis = new FileInputStream(file);
+    try {
+      return createFromKeyStore(fis, pwd, sslProtocol);
     } finally {
       fis.close();
     }
+  }
+
+  public static SSLContext createFromKeyStore(InputStream is, String pwd, String sslProtocol) throws KeyStoreException, NoSuchAlgorithmException, CertificateException, IOException, UnrecoverableKeyException, KeyManagementException {
+    KeyStore ks = createKeyStore(is, pwd);
+    KeyManagerFactory kmf = createKeyManager(ks, pwd);
+    TrustManagerFactory tmf = createTrustManagerFactory(ks);
+    return create(kmf.getKeyManagers(), tmf.getTrustManagers(), sslProtocol);
   }
 
   public static SSLContext create(KeyManager[] keyManagers, TrustManager[] trustManagers, String sslProtocol) throws KeyManagementException {
