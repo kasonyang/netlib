@@ -88,11 +88,7 @@ public class ChannelHostTest {
       @Override
       public void handleException(Channel ch, Exception ex) {
         if(ex instanceof StopException){
-          try {
-            ch.close();
-          } catch (IOException ex1) {
-            throw new RuntimeException(ex1);
-          }
+          ch.close();
         }else{
           throw new RuntimeException(ex);
         }
