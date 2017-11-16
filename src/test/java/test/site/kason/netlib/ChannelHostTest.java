@@ -35,7 +35,7 @@ public class ChannelHostTest {
 
   @Test
   public void testSSL() throws Exception {
-    //SSLChannel svr = SSLChannelFactory.createFromKeyStoreFile(true,keyStore,trustStore,pwd);
+    //SSLChannel svr = SSLChannelFactory.createFromKeyStore(true,keyStore,trustStore,pwd);
     doTest(9001,new CodecFactory() {
       @Override
       public List<Codec> createCodecs(Channel ch) {
@@ -147,7 +147,7 @@ public class ChannelHostTest {
           }
         }
         log("server accepted:" + ch.toString());
-        //final IOBuffer readBuffer = IOBuffer.createFromKeyStoreFile(data.length);
+        //final IOBuffer readBuffer = IOBuffer.createFromKeyStore(data.length);
         ch.read(new ReadTask() {
           @Override
           public boolean handleRead(Channel ch,IOBuffer readBuffer) {
@@ -190,7 +190,7 @@ public class ChannelHostTest {
     //String trustStore = "sslclientkeys";
     String pwd = "net-lib";
     try{
-    SSLContext context = SSLContextUtil.createFromKeyStoreFile(keyStoreFile, pwd);
+    SSLContext context = SSLContextUtil.createFromKeyStore(keyStoreFile, pwd);
     return new SSLCodec(ch,context, clientMode);
     }catch(Exception ex){
       throw new RuntimeException(ex);

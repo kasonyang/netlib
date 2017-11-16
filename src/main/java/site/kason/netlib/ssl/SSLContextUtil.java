@@ -28,14 +28,14 @@ public class SSLContextUtil {
           TLS_1_1 = "TLSv1.1",
           TLS_1_2 = "TLSv1.2";
 
-  public static SSLContext createFromKeyStoreFile(File file, String pwd) throws KeyManagementException, IOException, KeyStoreException, NoSuchAlgorithmException, CertificateException, UnrecoverableKeyException {
-    return createFromKeyStoreFile(file, pwd, TLS_1);
+  public static SSLContext createFromKeyStore(File file, String pwd) throws KeyManagementException, IOException, KeyStoreException, NoSuchAlgorithmException, CertificateException, UnrecoverableKeyException {
+    return SSLContextUtil.createFromKeyStore(file, pwd, TLS_1);
   }
 
-  public static SSLContext createFromKeyStoreFile(File file, String pwd, String sslProtocol) throws KeyManagementException, IOException, KeyStoreException, NoSuchAlgorithmException, CertificateException, UnrecoverableKeyException {
+  public static SSLContext createFromKeyStore(File file, String pwd, String sslProtocol) throws KeyManagementException, IOException, KeyStoreException, NoSuchAlgorithmException, CertificateException, UnrecoverableKeyException {
     FileInputStream fis = new FileInputStream(file);
     try {
-      return createFromKeyStore(fis, pwd, sslProtocol);
+      return SSLContextUtil.createFromKeyStore(fis, pwd, sslProtocol);
     } finally {
       fis.close();
     }
