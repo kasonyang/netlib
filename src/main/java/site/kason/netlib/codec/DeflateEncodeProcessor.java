@@ -34,7 +34,7 @@ public class DeflateEncodeProcessor implements Processor {
     int result = deflater.deflate(out.array(),out.getWritePosition(),out.getWritableSize());
     out.setWritePosition(out.getWritePosition()+result);
     int consumed = deflater.getTotalIn() - oldTotalIn;
-    in.skip(consumed);
+    in.moveReadPosition(consumed);
   }
 
 }

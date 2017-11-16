@@ -39,7 +39,7 @@ public class DeflateDecodeProcessor implements Processor {
       int result = inflater.inflate(out.array(), out.getWritePosition(), out.getWritableSize());
       out.setWritePosition(out.getWritePosition()+result);
       int consumed = inflater.getTotalIn() - oldTotalIn;
-      in.skip(consumed);
+      in.moveReadPosition(consumed);
     } catch (DataFormatException ex) {
       //TODO handle ex
       throw new RuntimeException(ex);

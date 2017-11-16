@@ -137,7 +137,7 @@ public class Channel implements Hostable {
       if(out.getReadableSize()>0){
         ByteBuffer byteBuffer = ByteBuffer.wrap(out.array(),out.getReadPosition(),out.getReadableSize());
         int wlen = sc.write(byteBuffer);
-        out.skip(wlen);
+        out.moveReadPosition(wlen);
         this.prepareWrite();
         return;
       }

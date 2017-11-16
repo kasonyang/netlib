@@ -120,7 +120,7 @@ public class SSLSession {
     int byteConsumed = result.bytesConsumed();
     int byteProduced = result.bytesProduced();
     if (byteConsumed > 0) {
-      handshakeReadBuffer.skip(byteConsumed);
+      handshakeReadBuffer.moveReadPosition(byteConsumed);
     }
     if (byteProduced > 0) {
       handshakeWriteBuffer.setWritePosition(handshakeWriteBuffer.getWritePosition() + byteProduced);
@@ -144,7 +144,7 @@ public class SSLSession {
     SSLEngineResult res = sslEngine.wrap(srcBf, outBf);
     int byteConsumed = res.bytesConsumed();
     int byteProduced = res.bytesProduced();
-    source.skip(byteConsumed);
+    source.moveReadPosition(byteConsumed);
     dest.setWritePosition(dest.getWritePosition() + byteProduced);
   }
 
@@ -154,7 +154,7 @@ public class SSLSession {
     SSLEngineResult res = sslEngine.unwrap(srcBf, outBf);
     int byteConsumed = res.bytesConsumed();
     int byteProduced = res.bytesProduced();
-    source.skip(byteConsumed);
+    source.moveReadPosition(byteConsumed);
     dest.setWritePosition(dest.getWritePosition() + byteProduced);
   }
 

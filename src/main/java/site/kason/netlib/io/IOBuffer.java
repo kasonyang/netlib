@@ -47,7 +47,7 @@ public class IOBuffer {
   public void push(IOBuffer src) {
     int size = Math.min(this.getWritableSize(), src.getReadableSize());
     this.push(src.array(), src.getReadPosition(), size);
-    src.skip(size);
+    src.moveReadPosition(size);
   }
 
   public void peek(byte[] dest, int offset, int length) {
@@ -58,20 +58,9 @@ public class IOBuffer {
     System.arraycopy(byteBuffer, readOffset, dest, offset, length);
   }
 
-  public void skip(int length) {
-    int readableSize = this.getReadableSize();
-    if (length > readableSize) {
-      throw new BufferOverflowException(length, readableSize);
-    }
-    this.readOffset += length;
-    for (IOBufferListener lst : listeners) {
-      lst.polled(this);
-    }
-  }
-
   protected void poll0(byte[] dest, int offset, int length) {
     this.peek(dest, offset, length);
-    this.skip(length);
+    this.moveReadPosition(length);
   }
 
   public void poll(byte[] dest, int offset, int length) {
@@ -151,6 +140,14 @@ public class IOBuffer {
       throw new IllegalArgumentException("position is out of limit");
     }
     this.writeOffset = newPosition;
+  }
+  
+  public void moveReadPosition(int size) {
+    this.setReadPosition(this.getReadPosition() + size);
+  }
+
+  public void moveWritePosition(int size) {
+    this.setWritePosition(this.getWritePosition() + size);
   }
 
   @Override
