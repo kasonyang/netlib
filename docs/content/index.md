@@ -61,12 +61,12 @@ gradle:
       
     });
 
-## Enable SSL
+## Enable SSL/TLS
 
     boolean clientMode = true;
-    String keyStore = "sslclientkeys";
+    File keyStore = new File("sslclientkeys");
     String pwd = "net-lib";
-    SSLContext context = SSLContextFactory.create(keyStore, pwd);
+    SSLContext context = SSLContextUtil.createFromKeyStore(keyStore, pwd);
     SSLCodec sslCodec = new SSLCodec(ch,context, clientMode);
     channel.addCodec(sslCodec);
 
