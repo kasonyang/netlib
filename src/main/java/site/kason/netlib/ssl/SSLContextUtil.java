@@ -1,8 +1,10 @@
 package site.kason.netlib.ssl;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -26,15 +28,20 @@ public class SSLContextUtil {
           TLS_1_1 = "TLSv1.1",
           TLS_1_2 = "TLSv1.2";
 
-  public static SSLContext createFromKeyStoreFile(String file, String pwd) throws KeyManagementException, IOException, KeyStoreException, NoSuchAlgorithmException, CertificateException, UnrecoverableKeyException {
+  public static SSLContext createFromKeyStoreFile(File file, String pwd) throws KeyManagementException, IOException, KeyStoreException, NoSuchAlgorithmException, CertificateException, UnrecoverableKeyException {
     return createFromKeyStoreFile(file, pwd, TLS_1);
   }
 
-  public static SSLContext createFromKeyStoreFile(String file, String pwd, String sslProtocol) throws KeyManagementException, IOException, KeyStoreException, NoSuchAlgorithmException, CertificateException, UnrecoverableKeyException {
-    KeyStore ks = createKeyStore(file, pwd);
-    KeyManagerFactory kmf = createKeyManager(ks, pwd);
-    TrustManagerFactory tmf = createTrustManagerFactory(ks);
-    return create(kmf.getKeyManagers(), tmf.getTrustManagers(), sslProtocol);
+  public static SSLContext createFromKeyStoreFile(File file, String pwd, String sslProtocol) throws KeyManagementException, IOException, KeyStoreException, NoSuchAlgorithmException, CertificateException, UnrecoverableKeyException {
+    FileInputStream fis  = new FileInputStream(file);
+    try{
+      KeyStore ks = createKeyStore(fis, pwd);
+      KeyManagerFactory kmf = createKeyManager(ks, pwd);
+      TrustManagerFactory tmf = createTrustManagerFactory(ks);
+      return create(kmf.getKeyManagers(), tmf.getTrustManagers(), sslProtocol);
+    } finally {
+      fis.close();
+    }
   }
 
   public static SSLContext create(KeyManager[] keyManagers, TrustManager[] trustManagers, String sslProtocol) throws KeyManagementException {
@@ -60,15 +67,10 @@ public class SSLContextUtil {
     return tmf;
   }
 
-  private static KeyStore createKeyStore(String file, String pwd) throws KeyStoreException, NoSuchAlgorithmException, CertificateException, FileNotFoundException, IOException {
+  private static KeyStore createKeyStore(InputStream inputStream, String pwd) throws KeyStoreException, NoSuchAlgorithmException, CertificateException, FileNotFoundException, IOException {
     KeyStore ks = KeyStore.getInstance("JKS");
     char[] passphrase = pwd.toCharArray();
-    FileInputStream fis = new FileInputStream(file);
-    try {
-      ks.load(fis, passphrase);
-    } finally {
-      fis.close();
-    }
+    ks.load(inputStream, passphrase);
     return ks;
   }
 }

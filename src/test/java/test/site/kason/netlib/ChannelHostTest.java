@@ -1,5 +1,6 @@
 package test.site.kason.netlib;
 
+import java.io.File;
 import java.io.IOException;
 import static org.junit.Assert.*;
 
@@ -185,11 +186,11 @@ public class ChannelHostTest {
   }
   
   private Codec createSSLCodec(Channel ch,boolean clientMode){
-    String keyStore = "sslclientkeys";
+    File keyStoreFile = new File("sslclientkeys");
     //String trustStore = "sslclientkeys";
     String pwd = "net-lib";
     try{
-    SSLContext context = SSLContextUtil.createFromKeyStoreFile(keyStore, pwd);
+    SSLContext context = SSLContextUtil.createFromKeyStoreFile(keyStoreFile, pwd);
     return new SSLCodec(ch,context, clientMode);
     }catch(Exception ex){
       throw new RuntimeException(ex);
