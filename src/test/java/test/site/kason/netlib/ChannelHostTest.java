@@ -107,7 +107,7 @@ public class ChannelHostTest {
           public boolean handleRead(Channel channel,IOBuffer b) {
             if(counter<3){//test prepareRead even if no new data arrived
               counter++;
-              channel.prepareRead();
+              //channel.prepareRead();
               return false;
             }
             int rlen = b.getReadableSize();
