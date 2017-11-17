@@ -1,5 +1,6 @@
 package test.site.kason.netlib;
 
+import java.io.File;
 import java.io.IOException;
 import static org.junit.Assert.*;
 
@@ -15,7 +16,7 @@ import org.junit.Test;
 import site.kason.netlib.codec.DeflateCodec;
 import site.kason.netlib.io.IOBuffer;
 import site.kason.netlib.ssl.SSLCodec;
-import site.kason.netlib.ssl.SSLContextFactory;
+import site.kason.netlib.ssl.SSLContextUtil;
 import site.kason.netlib.tcp.AcceptHandler;
 import site.kason.netlib.tcp.ChannelHost;
 import site.kason.netlib.tcp.Channel;
@@ -34,7 +35,7 @@ public class ChannelHostTest {
 
   @Test
   public void testSSL() throws Exception {
-    //SSLChannel svr = SSLChannelFactory.create(true,keyStore,trustStore,pwd);
+    //SSLChannel svr = SSLChannelFactory.createFromKeyStore(true,keyStore,trustStore,pwd);
     doTest(9001,new CodecFactory() {
       @Override
       public List<Codec> createCodecs(Channel ch) {
@@ -88,11 +89,7 @@ public class ChannelHostTest {
       @Override
       public void handleException(Channel ch, Exception ex) {
         if(ex instanceof StopException){
-          try {
-            ch.close();
-          } catch (IOException ex1) {
-            throw new RuntimeException(ex1);
-          }
+          ch.close();
         }else{
           throw new RuntimeException(ex);
         }
@@ -110,7 +107,7 @@ public class ChannelHostTest {
           public boolean handleRead(Channel channel,IOBuffer b) {
             if(counter<3){//test prepareRead even if no new data arrived
               counter++;
-              channel.prepareRead();
+              //channel.prepareRead();
               return false;
             }
             int rlen = b.getReadableSize();
@@ -150,7 +147,7 @@ public class ChannelHostTest {
           }
         }
         log("server accepted:" + ch.toString());
-        //final IOBuffer readBuffer = IOBuffer.create(data.length);
+        //final IOBuffer readBuffer = IOBuffer.createFromKeyStore(data.length);
         ch.read(new ReadTask() {
           @Override
           public boolean handleRead(Channel ch,IOBuffer readBuffer) {
@@ -189,11 +186,11 @@ public class ChannelHostTest {
   }
   
   private Codec createSSLCodec(Channel ch,boolean clientMode){
-    String keyStore = "sslclientkeys";
+    File keyStoreFile = new File("sslclientkeys");
     //String trustStore = "sslclientkeys";
     String pwd = "net-lib";
     try{
-    SSLContext context = SSLContextFactory.create(keyStore, pwd);
+    SSLContext context = SSLContextUtil.createFromKeyStore(keyStoreFile, pwd);
     return new SSLCodec(ch,context, clientMode);
     }catch(Exception ex){
       throw new RuntimeException(ex);

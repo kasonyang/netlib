@@ -35,9 +35,9 @@ public class ByteWriteTask implements WriteTask {
       offset+=maxSize;
     }
     boolean finished = offset > lastOffset;
-    if(!finished){
-      ch.prepareWrite();
-    }
+//    if(!finished){
+//      ch.prepareWrite();
+//    }
     return finished;
   }
 

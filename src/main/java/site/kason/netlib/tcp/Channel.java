@@ -36,11 +36,7 @@ public class Channel implements Hostable {
     @Override
     public void handleException(Channel ch, Exception ex) {
       Logger.getLogger(Channel.class.getName()).log(Level.SEVERE, null, ex);
-      try {
-        ch.close();
-      } catch (IOException ex1) {
-        Logger.getLogger(Channel.class.getName()).log(Level.SEVERE, null, ex1);
-      }
+      ch.close();
     }
 
   };
@@ -73,7 +69,7 @@ public class Channel implements Hostable {
     return socketChannel;
   }
 
-  public void close() throws IOException {
+  public void close(){
     this.closePending = false;
     if (this.closed) {
       return;
@@ -87,8 +83,12 @@ public class Channel implements Hostable {
         connectionHandler.channelClosed(this);
       }
     } finally {
-      host.closeChannel(this);
-      socketChannel.close();
+      try {
+        host.closeChannel(this);
+        socketChannel.close();
+      } catch (Exception ex) {
+        this.exceptionHandler.handleException(this, ex);
+      }
     }
   }
 
@@ -137,7 +137,7 @@ public class Channel implements Hostable {
       if(out.getReadableSize()>0){
         ByteBuffer byteBuffer = ByteBuffer.wrap(out.array(),out.getReadPosition(),out.getReadableSize());
         int wlen = sc.write(byteBuffer);
-        out.skip(wlen);
+        out.moveReadPosition(wlen);
         this.prepareWrite();
         return;
       }
