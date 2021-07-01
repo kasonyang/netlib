@@ -116,17 +116,21 @@ public class Channel implements Hostable {
   public synchronized void write(WriteTask cb) {
     cb = filterWrite(cb);
     this.writeTasks.add(cb);
-    this.prepareWrite();
+    this.continueWrite();
   }
 
   public synchronized void read(ReadTask cb) {
     cb = filterRead(cb);
     this.readTasks.add(cb);
-    this.prepareRead();
+    this.continueRead();
   }
 
-  public synchronized void prepareWrite() {
-    host.prepareWrite(this);
+  public synchronized void continueWrite() {
+    host.continueWrite(this);
+  }
+
+  public synchronized void pauseWrite() {
+    host.pauseWrite(this);
   }
 
   protected void handleWrite() {
@@ -138,11 +142,11 @@ public class Channel implements Hostable {
         ByteBuffer byteBuffer = ByteBuffer.wrap(out.array(),out.getReadPosition(),out.getReadableSize());
         int wlen = sc.write(byteBuffer);
         out.moveReadPosition(wlen);
-        this.prepareWrite();
         return;
       }
       List<WriteTask> writeCallbacks = this.writeTasks;
       if(writeCallbacks.isEmpty()){
+        pauseWrite();
         return;
       }
       WriteTask cb = writeCallbacks.get(0);
@@ -156,7 +160,6 @@ public class Channel implements Hostable {
       if (writeFinished) {
         writeCallbacks.remove(0);
       }
-      this.prepareWrite();
     } catch (IOException ex) {
       exceptionHandler.handleException(this, ex);
     } catch (RuntimeException ex){
@@ -164,8 +167,12 @@ public class Channel implements Hostable {
     }
   }
 
-  public synchronized void prepareRead() {
-    host.prepareRead(this);
+  public synchronized void continueRead() {
+    host.continueRead(this);
+  }
+
+  public synchronized void pauseRead() {
+    host.pauseRead(this);
   }
 
   protected void handleRead() {
@@ -188,11 +195,8 @@ public class Channel implements Hostable {
       if(out.getReadableSize()<=0){//no data for read
         if(this.closePending){
           this.close();
-          return;
-        }else{
-          this.prepareRead();
-          return;
         }
+        return;
       }
       List<ReadTask> readCallbacks = readTasks;
       if (readCallbacks.size() > 0) {
@@ -202,9 +206,11 @@ public class Channel implements Hostable {
           if (readFinished) {
             readCallbacks.remove(0);
           }
-          if(!readCallbacks.isEmpty()){
-            this.prepareRead();
-          } 
+          if(readCallbacks.isEmpty()){
+            pauseRead();
+          } else {
+            continueRead();
+          }
         } catch (Exception ex) {
           exceptionHandler.handleException(this, ex);
         }

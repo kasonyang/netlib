@@ -12,18 +12,29 @@ public class ByteWriteTask implements WriteTask {
 
   private final byte[] data;
 
-  private int lastOffset;
+  private final int lastOffset;
 
   private int offset;
 
+  private final Runnable finishCallback;
+
   public ByteWriteTask(byte[] data) {
-    this(data,0,data.length);
+    this(data, null);
+  }
+
+  public ByteWriteTask(byte[] data, Runnable finishCallback) {
+    this(data,0,data.length, finishCallback);
   }
 
   public ByteWriteTask(byte[] data, int offset, int length) {
+    this(data, offset, length, null);
+  }
+
+  public ByteWriteTask(byte[] data, int offset, int length, Runnable finishCallback) {
     this.data = data;
     this.offset = offset;
     this.lastOffset = offset + length - 1;
+    this.finishCallback = finishCallback;
   }
 
   @Override
@@ -35,6 +46,9 @@ public class ByteWriteTask implements WriteTask {
       offset+=maxSize;
     }
     boolean finished = offset > lastOffset;
+    if (finished && this.finishCallback != null) {
+      this.finishCallback.run();
+    }
 //    if(!finished){
 //      ch.prepareWrite();
 //    }

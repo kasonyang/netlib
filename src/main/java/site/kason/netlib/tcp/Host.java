@@ -11,9 +11,13 @@ public interface Host {
 
     //void acceptRegister(Hostable channel) throws ClosedChannelException;
     
-    void prepareWrite(Channel ch);
+    void continueWrite(Channel ch);
+
+    void pauseWrite(Channel ch);
     
-    void prepareRead(Channel ch);
+    void continueRead(Channel ch);
+
+    void pauseRead(Channel ch);
     
     void prepareConnect(Channel ch);
     

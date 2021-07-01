@@ -67,6 +67,7 @@ public class SSLSession {
   private void handshakeRead(IOBuffer in) throws IOException {
     //System.out.println("handling unwrap:" + channel);
     //this.readToBuffer(transfer);
+    channel.pauseRead();
     this.handshakeReadBuffer.compact();
     this.handshakeReadBuffer.push(in);
     if (this.finishHandshakePending) {
@@ -77,6 +78,7 @@ public class SSLSession {
   }
 
   private void handshakeWrite(IOBuffer out) throws SSLException, IOException {
+    channel.pauseWrite();
     //System.out.println("handling wrap:" + channel);
     this.handshakeWriteBuffer.compact();
     out.push(this.handshakeWriteBuffer);
@@ -105,8 +107,8 @@ public class SSLSession {
       this.handleResult(unwrapResult);
     } else if (hs == HandshakeStatus.FINISHED) {
       this.finishHandshakePending = true;
-      channel.prepareRead();
-      channel.prepareWrite();
+      channel.continueRead();
+      channel.continueWrite();
       //System.out.println("handling FINISHED");
     } else if (hs == HandshakeStatus.NOT_HANDSHAKING) {
       sslEngine.beginHandshake();
@@ -124,15 +126,15 @@ public class SSLSession {
     }
     if (byteProduced > 0) {
       handshakeWriteBuffer.setWritePosition(handshakeWriteBuffer.getWritePosition() + byteProduced);
-      channel.prepareWrite();
+      channel.continueWrite();
     }
     SSLEngineResult.Status status = result.getStatus();
     if (status == SSLEngineResult.Status.OK) {
       this.prepareNextOperationOfHandshake(result.getHandshakeStatus());
     } else if (status == SSLEngineResult.Status.BUFFER_OVERFLOW) {
-      channel.prepareWrite();
+      channel.continueWrite();
     } else if (status == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
-      channel.prepareRead();
+      channel.continueRead();
     } else {
       throw new RuntimeException("unexpected status:" + status);
     }
@@ -161,8 +163,8 @@ public class SSLSession {
   private void finishHandshake() {
     this.handshaked = true;
     this.handshaking = false;
-    channel.prepareRead();
-    channel.prepareWrite();
+    channel.continueRead();
+    channel.continueWrite();
     //System.out.println("handshake finished.");
   }
 

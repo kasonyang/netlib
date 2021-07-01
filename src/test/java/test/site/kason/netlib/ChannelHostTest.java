@@ -100,7 +100,12 @@ public class ChannelHostTest {
       @Override
       public void channelConnected(final Channel ch) {
         log("client:connected");
-        ch.write(new ByteWriteTask(data, 0, data.length));
+        ch.write(new ByteWriteTask(data, 0, data.length, new Runnable() {
+          @Override
+          public void run() {
+            log("client written");
+          }
+        }));
         ch.read(new ReadTask() {
           private int counter = 0;
           @Override

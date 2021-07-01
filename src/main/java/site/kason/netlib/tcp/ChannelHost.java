@@ -43,7 +43,7 @@ public class ChannelHost implements Host {
   }
 
   @Override
-  public void prepareWrite(Channel ch) {
+  public void continueWrite(Channel ch) {
     if(ch.isWritable()){
       this.writeRequiredList.add(ch);
       selector.wakeup();
@@ -53,13 +53,23 @@ public class ChannelHost implements Host {
   }
 
   @Override
-  public void prepareRead(Channel ch) {
+  public void pauseWrite(Channel ch) {
+    this.interest(ch, SelectionKey.OP_WRITE, false);
+  }
+
+  @Override
+  public void continueRead(Channel ch) {
     if(ch.isReadable()){
       this.readRequiredList.add(ch);
       selector.wakeup();
     }else{
       this.interest(ch, SelectionKey.OP_READ, true);
     }
+  }
+
+  @Override
+  public void pauseRead(Channel ch) {
+    this.interest(ch, SelectionKey.OP_READ, false);
   }
 
   protected ChannelHost() throws IOException {
@@ -93,11 +103,9 @@ public class ChannelHost implements Host {
     SocketChannel sc = (SocketChannel) key.channel();
     Channel ch = (Channel) channels.get(sc);
     if (key.isReadable()) {
-      this.interest(ch, SelectionKey.OP_READ, false);
       ch.handleRead();
     }
     if (key.isWritable()) {
-      this.interest(ch, SelectionKey.OP_WRITE, false);
       ch.handleWrite();
     }
     if (key.isConnectable()) {
