@@ -2,12 +2,10 @@ apply plugin:'java'
 repositories {
   mavenCentral()
 }
-dependencies {
+dependencies { 
+  compile 'com.google.code.findbugs:jsr305:3.0.1'
   testCompile 'junit:junit:4.12'
 }
-
-sourceCompatibility = JavaVersion.toVersion("1.6")
-targetCompatibility = JavaVersion.toVersion("1.6")
 
 apply from:'gradle/maven-publish.gradle'
 

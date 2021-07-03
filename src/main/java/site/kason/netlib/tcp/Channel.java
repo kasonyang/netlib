@@ -1,5 +1,11 @@
 package site.kason.netlib.tcp;
 
+import site.kason.netlib.io.IOBuffer;
+import site.kason.netlib.tcp.pipeline.Codec;
+import site.kason.netlib.tcp.pipeline.CodecInitProgress;
+import site.kason.netlib.tcp.pipeline.Pipeline;
+import site.kason.netlib.tcp.pipeline.Processor;
+
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
@@ -8,11 +14,9 @@ import java.nio.channels.SelectableChannel;
 import java.nio.channels.SocketChannel;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import site.kason.netlib.io.IOBuffer;
-import site.kason.netlib.tcp.pipeline.Codec;
-import site.kason.netlib.tcp.pipeline.Pipeline;
 
 public class Channel implements Hostable {
 
@@ -20,17 +24,25 @@ public class Channel implements Hostable {
 
   SocketChannel socketChannel;
 
-  protected final List<WriteTask> writeTasks = new LinkedList();
+  protected final List<WriteTask> writeTasks = new LinkedList<WriteTask>();
 
-  protected final List<ReadTask> readTasks = new LinkedList();
+  protected final List<ReadTask> readTasks = new LinkedList<ReadTask>();
 
-  private List<ChannelFilter> filters = new LinkedList();
+  private List<ChannelFilter> filters = new LinkedList<ChannelFilter>();
+
+  private final Queue<Codec> codecInitQueue = new LinkedList<Codec>();
+
+  private CodecInitProgress codecInitProgress;
 
   protected ConnectionHandler connectionHandler;
 
   private boolean closed = false;
   
   private boolean closePending = false;
+
+  private boolean pauseWritePending = false;
+
+  private WriteTask writtenTask;
 
   public ExceptionHandler DEFAULT_EXCEPTION_HANDLER = new ExceptionHandler() {
     @Override
@@ -126,11 +138,12 @@ public class Channel implements Hostable {
   }
 
   public synchronized void continueWrite() {
+    this.pauseWritePending = false;
     host.continueWrite(this);
   }
 
   public synchronized void pauseWrite() {
-    host.pauseWrite(this);
+    this.pauseWritePending = true;
   }
 
   protected void handleWrite() {
@@ -142,6 +155,16 @@ public class Channel implements Hostable {
         ByteBuffer byteBuffer = ByteBuffer.wrap(out.array(),out.getReadPosition(),out.getReadableSize());
         int wlen = sc.write(byteBuffer);
         out.moveReadPosition(wlen);
+        return;
+      }
+      if (writtenTask != null) {
+        WriteTask wt = writtenTask;
+        writtenTask = null;
+        wt.handleWritten(this);
+      }
+      if (pauseWritePending) {
+        pauseWritePending = false;
+        host.pauseWrite(this);
         return;
       }
       List<WriteTask> writeCallbacks = this.writeTasks;
@@ -158,7 +181,7 @@ public class Channel implements Hostable {
         exceptionHandler.handleException(this, ex);
       }
       if (writeFinished) {
-        writeCallbacks.remove(0);
+        writtenTask = writeCallbacks.remove(0);
       }
     } catch (IOException ex) {
       exceptionHandler.handleException(this, ex);
@@ -245,17 +268,10 @@ public class Channel implements Hostable {
 
   @Override
   public String toString() {
-    String la = "";
-    String ra = "";
     if (socketChannel != null) {
-      try {
-        la = socketChannel.getLocalAddress().toString();
-        ra = socketChannel.getRemoteAddress().toString();
-      } catch (IOException ex) {
-
-      }
+      return String.valueOf(socketChannel.socket());
     }
-    return String.format("[local=%s,remote=%s]", la, ra);
+    return "";
   }
 
   public int getWriteTaskCount() {
@@ -267,12 +283,8 @@ public class Channel implements Hostable {
   }
   
   public void addCodec(Codec codec){
-    if(codec.hasEncoder()){
-      this.encodePipeline.addProcessor(codec.getEncoder());
-    }
-    if(codec.hasDecoder()){
-      this.decodePipeline.addProcessor(0,codec.getDecoder());
-    }
+    codecInitQueue.add(codec);
+    initCodec();
   }
   
   public boolean isReadable(){
@@ -281,6 +293,39 @@ public class Channel implements Hostable {
   
   public boolean isWritable(){
     return this.encodePipeline.getOutBuffer().getReadableSize()>0;
+  }
+
+  private void initCodec() {
+    if (codecInitProgress != null) {
+      return;
+    }
+    final Channel channel = this;
+    codecInitProgress = new CodecInitProgress() {
+      private Codec currentCodec;
+      @Override
+      public void done() {
+        if (currentCodec != null) {
+          Processor encoder = currentCodec.getEncoder();
+          if (encoder != null) {
+            encodePipeline.addProcessor(encoder);
+          }
+          Processor decoder = currentCodec.getDecoder();
+          if (decoder != null) {
+            decodePipeline.addProcessor(0, decoder);
+          }
+          currentCodec = null;
+        }
+        if (codecInitQueue.isEmpty()) {
+          channel.codecInitProgress = null;
+          continueRead();
+          continueWrite();
+          return;
+        }
+        currentCodec = codecInitQueue.poll();
+        currentCodec.init(channel, this);
+      }
+    };
+    codecInitProgress.done();
   }
 
 }

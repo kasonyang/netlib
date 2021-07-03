@@ -1,14 +1,16 @@
 package site.kason.netlib.ssl;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
+import site.kason.netlib.io.BufferUnderflowException;
+import site.kason.netlib.io.IOBuffer;
+import site.kason.netlib.tcp.Channel;
+import site.kason.netlib.tcp.pipeline.CodecInitProgress;
+
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLEngineResult.HandshakeStatus;
 import javax.net.ssl.SSLException;
-import site.kason.netlib.io.BufferUnderflowException;
-import site.kason.netlib.io.IOBuffer;
-import site.kason.netlib.tcp.Channel;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 
 /**
  *
@@ -30,13 +32,16 @@ public class SSLSession {
 
   private final IOBuffer handshakeReadBuffer;
 
-  public SSLSession(Channel channel, SSLEngine sslEngine) {
+  private final CodecInitProgress progress;
+
+  public SSLSession(Channel channel, SSLEngine sslEngine, CodecInitProgress progress) {
     this.channel = channel;
     this.sslEngine = sslEngine;
     javax.net.ssl.SSLSession sess = sslEngine.getSession();
     int maxPacketSize = sess.getPacketBufferSize();
     this.handshakeReadBuffer = IOBuffer.create(maxPacketSize);
     this.handshakeWriteBuffer = IOBuffer.create(maxPacketSize);
+    this.progress = progress;
 
   }
 
@@ -49,22 +54,23 @@ public class SSLSession {
   }
 
   public void handleRead(IOBuffer in, IOBuffer out) throws SSLException, IOException {
-    if (this.isHandshaked()) {
-      this.decrypt(in, out);
-    } else {
-      this.handshakeRead(in);
+    if (!this.isHandshaked()) {
+      throw new IllegalStateException();
     }
+    this.decrypt(in, out);
   }
 
   public void handleWrite(IOBuffer in, IOBuffer out) throws SSLException, IOException {
-    if (this.isHandshaked()) {
-      this.encrypt(in, out);
-    } else {
-      this.handshakeWrite(out);
+    if (!this.isHandshaked()) {
+      throw new IllegalStateException();
     }
+    this.encrypt(in, out);
   }
 
-  private void handshakeRead(IOBuffer in) throws IOException {
+  public void handshakeRead(IOBuffer in) throws IOException {
+    if (isHandshaked()) {
+      return;
+    }
     //System.out.println("handling unwrap:" + channel);
     //this.readToBuffer(transfer);
     channel.pauseRead();
@@ -77,12 +83,19 @@ public class SSLSession {
     }
   }
 
-  private void handshakeWrite(IOBuffer out) throws SSLException, IOException {
+  public void handshakeWrite(IOBuffer out) throws SSLException, IOException {
+    if (isHandshaked()) {
+      return;
+    }
     channel.pauseWrite();
     //System.out.println("handling wrap:" + channel);
     this.handshakeWriteBuffer.compact();
     out.push(this.handshakeWriteBuffer);
     if (this.finishHandshakePending) {
+      if (out.getReadableSize() > 0) {
+        channel.continueWrite();
+        return;
+      }
       this.finishHandshake();
     } else {
       this.prepareNextOperationOfHandshake(sslEngine.getHandshakeStatus());
@@ -165,6 +178,7 @@ public class SSLSession {
     this.handshaking = false;
     channel.continueRead();
     channel.continueWrite();
+    progress.done();
     //System.out.println("handshake finished.");
   }
 

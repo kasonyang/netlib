@@ -1,31 +1,25 @@
 package test.site.kason.netlib;
 
-import java.io.File;
-import java.io.IOException;
-import static org.junit.Assert.*;
-
-import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-import java.util.Arrays;
-import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import javax.net.ssl.SSLContext;
-
+import org.junit.Assert;
 import org.junit.Test;
 import site.kason.netlib.codec.DeflateCodec;
 import site.kason.netlib.io.IOBuffer;
 import site.kason.netlib.ssl.SSLCodec;
 import site.kason.netlib.ssl.SSLContextUtil;
-import site.kason.netlib.tcp.AcceptHandler;
-import site.kason.netlib.tcp.ChannelHost;
-import site.kason.netlib.tcp.Channel;
-import site.kason.netlib.tcp.ConnectionHandler;
-import site.kason.netlib.tcp.ServerChannel;
-import site.kason.netlib.tcp.ReadTask;
-import site.kason.netlib.tcp.ExceptionHandler;
+import site.kason.netlib.tcp.*;
 import site.kason.netlib.tcp.pipeline.Codec;
 import site.kason.netlib.tcp.tasks.ByteWriteTask;
+
+import javax.net.ssl.SSLContext;
+import java.io.File;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.fail;
 
 public class ChannelHostTest {
   
@@ -36,17 +30,11 @@ public class ChannelHostTest {
   @Test
   public void testSSL() throws Exception {
     //SSLChannel svr = SSLChannelFactory.createFromKeyStore(true,keyStore,trustStore,pwd);
-    doTest(9001,new CodecFactory() {
-      @Override
-      public List<Codec> createCodecs(Channel ch) {
-        return Arrays.asList(createSSLCodec(ch, false));
-      }
-    },new CodecFactory() {
-      @Override
-      public List<Codec> createCodecs(Channel ch) {
-        return Arrays.asList(createSSLCodec(ch, true));
-      }
-    });
+    doTest(
+        9001,
+        ch -> Collections.singletonList(createSSLCodec(false)),
+        ch -> Collections.singletonList(createSSLCodec(true))
+    );
   }
 
   @Test
@@ -56,28 +44,17 @@ public class ChannelHostTest {
   
   @Test
   public void testDeflate() throws Exception{
-    CodecFactory cf = new CodecFactory() {
-      @Override
-      public List<Codec> createCodecs(Channel ch) {
-        return Arrays.asList((Codec)new DeflateCodec());
-      }
-    };
+    CodecFactory cf = ch -> Collections.singletonList((Codec) new DeflateCodec());
     doTest(9003,cf,cf);
   }
   
   @Test
   public void testDeflateAndSSL() throws Exception{
-    doTest(9004,new CodecFactory() {
-      @Override
-      public List<Codec> createCodecs(Channel ch) {
-        return Arrays.asList(createSSLCodec(ch, false),new DeflateCodec());
-      }
-    },new CodecFactory() {
-      @Override
-      public List<Codec> createCodecs(Channel ch) {
-        return Arrays.asList(createSSLCodec(ch, true),new DeflateCodec());
-      }
-    });
+    doTest(
+        9004,
+        ch -> Arrays.asList(createSSLCodec(false),new DeflateCodec()),
+        ch -> Arrays.asList(createSSLCodec(true),new DeflateCodec())
+    );
   }
 
   public void doTest(int port, final CodecFactory serverCodecFactory,final CodecFactory clientCodecFactory) throws Exception {
@@ -85,14 +62,11 @@ public class ChannelHostTest {
     final ChannelHost atcp = ChannelHost.create();
     SocketAddress addr = new InetSocketAddress(port);
     Channel client = atcp.createChannel();
-    final ExceptionHandler exh = new ExceptionHandler() {
-      @Override
-      public void handleException(Channel ch, Exception ex) {
-        if(ex instanceof StopException){
-          ch.close();
-        }else{
-          throw new RuntimeException(ex);
-        }
+    final ExceptionHandler exh = (ch, ex) -> {
+      if(ex instanceof StopException){
+        ch.close();
+      }else{
+        throw new RuntimeException(ex);
       }
     };
     client.setExceptionHandler(exh);
@@ -100,16 +74,19 @@ public class ChannelHostTest {
       @Override
       public void channelConnected(final Channel ch) {
         log("client:connected");
-        ch.write(new ByteWriteTask(data, 0, data.length, new Runnable() {
+        AtomicBoolean written = new AtomicBoolean(false);
+        ch.write(new ByteWriteTask(data, 0, data.length) {
           @Override
-          public void run() {
+          public void handleWritten(Channel channel) {
             log("client written");
+            written.set(true);
           }
-        }));
+        });
         ch.read(new ReadTask() {
           private int counter = 0;
           @Override
           public boolean handleRead(Channel channel,IOBuffer b) {
+            Assert.assertTrue(written.get());
             if(counter<3){//test prepareRead even if no new data arrived
               counter++;
               //channel.prepareRead();
@@ -142,42 +119,34 @@ public class ChannelHostTest {
       }
 
     });
-    ServerChannel server = atcp.createServerChannel(addr, new AcceptHandler() {
-      @Override
-      public void accepted(Channel ch) {
-        ch.setExceptionHandler(exh);
-        if(serverCodecFactory!=null){
-          for(Codec c:serverCodecFactory.createCodecs(ch)){
-            ch.addCodec(c);
-          }
+    atcp.createServerChannel(addr, ch -> {
+      ch.setExceptionHandler(exh);
+      if(serverCodecFactory!=null){
+        for(Codec c:serverCodecFactory.createCodecs(ch)){
+          ch.addCodec(c);
         }
-        log("server accepted:" + ch.toString());
-        //final IOBuffer readBuffer = IOBuffer.createFromKeyStore(data.length);
-        ch.read(new ReadTask() {
-          @Override
-          public boolean handleRead(Channel ch,IOBuffer readBuffer) {
-            log("server read");
-            int readSize = readBuffer.getReadableSize();
-            log("server:read " + readSize + " bytes");
-            if (readSize == -1) {
-              fail("connection closed.");
-              return true;
-            }
-            if (readBuffer.getReadableSize() >= data.length) {
-              byte[] receivedData = new byte[data.length];
-              readBuffer.poll(receivedData);
-              assertArrayEquals(data, receivedData);
-              ch.write(new ByteWriteTask(receivedData, 0, receivedData.length));
-              //atcp.stopListen();
-              return true;
-            } else {
-              return false;
-            }
-          }
-
-        });
       }
-
+      log("server accepted:" + ch.toString());
+      //final IOBuffer readBuffer = IOBuffer.createFromKeyStore(data.length);
+      ch.read((self, readBuffer) -> {
+        log("server read");
+        int readSize = readBuffer.getReadableSize();
+        log("server:read " + readSize + " bytes");
+        if (readSize == -1) {
+          fail("connection closed.");
+          return true;
+        }
+        if (readBuffer.getReadableSize() >= data.length) {
+          byte[] receivedData = new byte[data.length];
+          readBuffer.poll(receivedData);
+          assertArrayEquals(data, receivedData);
+          self.write(new ByteWriteTask(receivedData, 0, receivedData.length));
+          //atcp.stopListen();
+          return true;
+        } else {
+          return false;
+        }
+      });
     });
     client.connect(addr);
     if(clientCodecFactory!=null){
@@ -190,13 +159,13 @@ public class ChannelHostTest {
     client.close();
   }
   
-  private Codec createSSLCodec(Channel ch,boolean clientMode){
+  private Codec createSSLCodec(boolean clientMode){
     File keyStoreFile = new File("sslclientkeys");
     //String trustStore = "sslclientkeys";
     String pwd = "net-lib";
     try{
     SSLContext context = SSLContextUtil.createFromKeyStore(keyStoreFile, pwd);
-    return new SSLCodec(ch,context, clientMode);
+    return new SSLCodec(context, clientMode);
     }catch(Exception ex){
       throw new RuntimeException(ex);
     }
