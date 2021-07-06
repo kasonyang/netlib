@@ -6,6 +6,6 @@ package site.kason.netlib.tcp;
  */
 public interface ExceptionHandler {
 
-    public void handleException(Channel ch, Exception ex);
+    void handleException(Channel ch, Throwable ex);
 
 }

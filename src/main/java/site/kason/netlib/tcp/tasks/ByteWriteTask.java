@@ -27,7 +27,7 @@ public class ByteWriteTask implements WriteTask {
   }
 
   @Override
-  public boolean handleWrite(Channel ch,IOBuffer buffer) throws Exception {
+  public boolean handleWrite(Channel ch,IOBuffer buffer) {
     int remaining = lastOffset - offset + 1;
     if (remaining > 0) {
       int maxSize = Math.min(remaining, buffer.getWritableSize());

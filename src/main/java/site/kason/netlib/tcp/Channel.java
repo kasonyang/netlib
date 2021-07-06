@@ -1,5 +1,6 @@
 package site.kason.netlib.tcp;
 
+import lombok.SneakyThrows;
 import site.kason.netlib.io.IOBuffer;
 import site.kason.netlib.tcp.pipeline.Codec;
 import site.kason.netlib.tcp.pipeline.CodecInitProgress;
@@ -9,14 +10,11 @@ import site.kason.netlib.tcp.pipeline.Processor;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectableChannel;
 import java.nio.channels.SocketChannel;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 public class Channel implements Hostable {
 
@@ -44,17 +42,6 @@ public class Channel implements Hostable {
 
   private WriteTask writtenTask;
 
-  public ExceptionHandler DEFAULT_EXCEPTION_HANDLER = new ExceptionHandler() {
-    @Override
-    public void handleException(Channel ch, Exception ex) {
-      Logger.getLogger(Channel.class.getName()).log(Level.SEVERE, null, ex);
-      ch.close();
-    }
-
-  };
-
-  private ExceptionHandler exceptionHandler = DEFAULT_EXCEPTION_HANDLER;
-  
   private final Pipeline encodePipeline = new Pipeline();
   
   private final Pipeline decodePipeline = new Pipeline();
@@ -81,6 +68,7 @@ public class Channel implements Hostable {
     return socketChannel;
   }
 
+  @SneakyThrows
   public void close(){
     this.closePending = false;
     if (this.closed) {
@@ -95,12 +83,8 @@ public class Channel implements Hostable {
         connectionHandler.channelClosed(this);
       }
     } finally {
-      try {
-        host.closeChannel(this);
-        socketChannel.close();
-      } catch (Exception ex) {
-        this.exceptionHandler.handleException(this, ex);
-      }
+      host.closeChannel(this);
+      socketChannel.close();
     }
   }
 
@@ -146,47 +130,36 @@ public class Channel implements Hostable {
     this.pauseWritePending = true;
   }
 
+  @SneakyThrows
   protected void handleWrite() {
     SocketChannel sc = this.socketChannel;
     IOBuffer out = encodePipeline.getOutBuffer();
-    try {
-      encodePipeline.process();
-      if(out.getReadableSize()>0){
-        ByteBuffer byteBuffer = ByteBuffer.wrap(out.array(),out.getReadPosition(),out.getReadableSize());
-        int wlen = sc.write(byteBuffer);
-        out.moveReadPosition(wlen);
-        return;
-      }
-      if (writtenTask != null) {
-        WriteTask wt = writtenTask;
-        writtenTask = null;
-        wt.handleWritten(this);
-      }
-      if (pauseWritePending) {
-        pauseWritePending = false;
-        host.pauseWrite(this);
-        return;
-      }
-      List<WriteTask> writeCallbacks = this.writeTasks;
-      if(writeCallbacks.isEmpty()){
-        pauseWrite();
-        return;
-      }
-      WriteTask cb = writeCallbacks.get(0);
-      boolean writeFinished;
-      try {
-        writeFinished = cb.handleWrite(this,encodePipeline.getInBuffer());
-      } catch (Exception ex) {
-        writeFinished = false;
-        exceptionHandler.handleException(this, ex);
-      }
-      if (writeFinished) {
-        writtenTask = writeCallbacks.remove(0);
-      }
-    } catch (IOException ex) {
-      exceptionHandler.handleException(this, ex);
-    } catch (RuntimeException ex){
-      exceptionHandler.handleException(this, ex);
+    encodePipeline.process();
+    if (out.getReadableSize() > 0) {
+      ByteBuffer byteBuffer = ByteBuffer.wrap(out.array(), out.getReadPosition(), out.getReadableSize());
+      int wlen = sc.write(byteBuffer);
+      out.moveReadPosition(wlen);
+      return;
+    }
+    if (writtenTask != null) {
+      WriteTask wt = writtenTask;
+      writtenTask = null;
+      wt.handleWritten(this);
+    }
+    if (pauseWritePending) {
+      pauseWritePending = false;
+      host.pauseWrite(this);
+      return;
+    }
+    List<WriteTask> writeCallbacks = this.writeTasks;
+    if (writeCallbacks.isEmpty()) {
+      pauseWrite();
+      return;
+    }
+    WriteTask cb = writeCallbacks.get(0);
+    boolean writeFinished = cb.handleWrite(this, encodePipeline.getInBuffer());
+    if (writeFinished) {
+      writtenTask = writeCallbacks.remove(0);
     }
   }
 
@@ -198,50 +171,37 @@ public class Channel implements Hostable {
     host.pauseRead(this);
   }
 
+  @SneakyThrows
   protected void handleRead() {
-    try {
-      SocketChannel sc = this.socketChannel;
-      IOBuffer in = decodePipeline.getInBuffer();
-      IOBuffer out = decodePipeline.getOutBuffer();
-      ByteBuffer byteBuffer = ByteBuffer.wrap(in.array(), in.getWritePosition(), in.getWritableSize());
-      try{
-        int rlen = sc.read(byteBuffer);
-        if(rlen==-1){
-          this.closePending = true;
-        }else if(rlen>0){
-          in.setWritePosition(in.getWritePosition()+rlen);
-        }
-      }catch(ClosedChannelException ex){
-        this.closePending = true;
+    SocketChannel sc = this.socketChannel;
+    IOBuffer in = decodePipeline.getInBuffer();
+    IOBuffer out = decodePipeline.getOutBuffer();
+    ByteBuffer byteBuffer = ByteBuffer.wrap(in.array(), in.getWritePosition(), in.getWritableSize());
+    int rlen = sc.read(byteBuffer);
+    if (rlen == -1) {
+      this.closePending = true;
+    } else if (rlen > 0) {
+      in.setWritePosition(in.getWritePosition() + rlen);
+    }
+    decodePipeline.process();
+    if (out.getReadableSize() <= 0) {//no data for read
+      if (this.closePending) {
+        this.close();
       }
-      decodePipeline.process();
-      if(out.getReadableSize()<=0){//no data for read
-        if(this.closePending){
-          this.close();
-        }
-        return;
+      return;
+    }
+    List<ReadTask> readCallbacks = readTasks;
+    if (readCallbacks.size() > 0) {
+      ReadTask cb = readCallbacks.get(0);
+      boolean readFinished = cb.handleRead(this, out);
+      if (readFinished) {
+        readCallbacks.remove(0);
       }
-      List<ReadTask> readCallbacks = readTasks;
-      if (readCallbacks.size() > 0) {
-        ReadTask cb = readCallbacks.get(0);
-        try {
-          boolean readFinished = cb.handleRead(this,out);
-          if (readFinished) {
-            readCallbacks.remove(0);
-          }
-          if(readCallbacks.isEmpty()){
-            pauseRead();
-          } else {
-            continueRead();
-          }
-        } catch (Exception ex) {
-          exceptionHandler.handleException(this, ex);
-        }
+      if (readCallbacks.isEmpty()) {
+        pauseRead();
+      } else {
+        continueRead();
       }
-    } catch (IOException ex) {
-      this.exceptionHandler.handleException(this, ex);
-    } catch (RuntimeException ex){
-      this.exceptionHandler.handleException(this, ex);
     }
   }
 
@@ -260,10 +220,6 @@ public class Channel implements Hostable {
   public void installFilter(ChannelFilter filter) {
     this.filters.add(filter);
     filter.installed(this);
-  }
-
-  public void setExceptionHandler(ExceptionHandler exceptionHandler) {
-    this.exceptionHandler = exceptionHandler;
   }
 
   @Override
@@ -293,6 +249,18 @@ public class Channel implements Hostable {
   
   public boolean isWritable(){
     return this.encodePipeline.getOutBuffer().getReadableSize()>0;
+  }
+
+  public void handleConnected() {
+    if (connectionHandler != null) {
+      connectionHandler.channelConnected(this);
+    }
+  }
+
+  public void handleConnectFailed(IOException ex) {
+    if (connectionHandler != null) {
+      connectionHandler.channelConnectFailed(this, ex);
+    }
   }
 
   private void initCodec() {

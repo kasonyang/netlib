@@ -69,7 +69,7 @@ public class ChannelHostTest {
         throw new RuntimeException(ex);
       }
     };
-    client.setExceptionHandler(exh);
+    atcp.setExceptionHandler(exh);
     client.setConnectionHandler(new ConnectionHandler() {
       @Override
       public void channelConnected(final Channel ch) {
@@ -120,7 +120,6 @@ public class ChannelHostTest {
 
     });
     atcp.createServerChannel(addr, ch -> {
-      ch.setExceptionHandler(exh);
       if(serverCodecFactory!=null){
         for(Codec c:serverCodecFactory.createCodecs(ch)){
           ch.addCodec(c);

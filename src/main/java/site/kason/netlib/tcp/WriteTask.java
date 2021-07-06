@@ -11,9 +11,8 @@ public interface WriteTask {
    * @param channel the channel
    * @param buffer  the write buffer
    * @return true if task is finished.
-   * @throws Exception if some error occurs
    */
-  boolean handleWrite(Channel channel, IOBuffer buffer) throws Exception;
+  boolean handleWrite(Channel channel, IOBuffer buffer);
 
   /**
    * Call when handleWrite returning true and buffer flushed.

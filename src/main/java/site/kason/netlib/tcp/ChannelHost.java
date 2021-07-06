@@ -1,40 +1,36 @@
 package site.kason.netlib.tcp;
 
+import lombok.SneakyThrows;
+
 import java.io.IOException;
 import java.net.SocketAddress;
-import java.nio.channels.CancelledKeyException;
-import java.nio.channels.ClosedChannelException;
-import java.nio.channels.SelectableChannel;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
-import java.util.Set;
+import java.nio.channels.*;
+import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class ChannelHost implements Host {
 
   Selector selector;
 
+  private ExceptionHandler exceptionHandler = (ch, ex) -> {
+    Logger.getLogger(ChannelHost.class.getName()).log(Level.SEVERE, null, ex);
+    ch.close();
+  };
+
   private boolean cancelled = false;
 
-  private HashMap<SelectableChannel, Hostable> channels = new HashMap();
+  private HashMap<SelectableChannel, Hostable> channels = new HashMap<>();
 
-  private HashMap<Hostable, SelectableChannel> socketChannels = new HashMap();
+  private HashMap<Hostable, SelectableChannel> socketChannels = new HashMap<>();
   
-  private List<Channel> readRequiredList = new LinkedList();
+  private List<Channel> readRequiredList = new LinkedList<>();
   
-  private List<Channel> writeRequiredList = new LinkedList();
+  private List<Channel> writeRequiredList = new LinkedList<>();
 
   //private ByteBuffer readBuffer = ByteBuffer.allocate(40960);
   public static ChannelHost create() throws IOException {
-    ChannelHost host = new ChannelHost();
-    return host;
+    return new ChannelHost();
   }
 
   @Override
@@ -76,6 +72,10 @@ public class ChannelHost implements Host {
     selector = Selector.open();
   }
 
+  public void setExceptionHandler(ExceptionHandler exceptionHandler) {
+    this.exceptionHandler = exceptionHandler;
+  }
+
   private void interest(Channel ch, int key, boolean interest) {
     SocketChannel sc = ch.socketChannel();
     SelectionKey selectionKey = sc.keyFor(selector);
@@ -103,52 +103,44 @@ public class ChannelHost implements Host {
     SocketChannel sc = (SocketChannel) key.channel();
     Channel ch = (Channel) channels.get(sc);
     if (key.isReadable()) {
-      ch.handleRead();
+      if (!execChannelBusiness(ch, ch::handleRead)) {
+        return;
+      }
     }
     if (key.isWritable()) {
-      ch.handleWrite();
+      if (!execChannelBusiness(ch, ch::handleWrite)) {
+        return;
+      }
     }
     if (key.isConnectable()) {
       this.interest(ch, SelectionKey.OP_CONNECT, false);
-      ConnectionHandler eh = ch.getConnectionHandler();
       try {
         if (sc.isConnectionPending()) {
           sc.finishConnect();
-          if (eh != null) {
-            eh.channelConnected(ch);
-          }
+          execChannelBusiness(ch, ch::handleConnected);
         }
       } catch (IOException ex) {
-        if (eh != null) {
-          eh.channelConnectFailed(ch, ex);
-        }
+        execChannelBusiness(ch, () -> ch.handleConnectFailed(ex));
       }
     }
   }
 
+  @SneakyThrows
   public void listen() {
     for (;;) {
-      try {
-        int readyCount = selector.select();
-        if (cancelled) {
-          return;
-        }
-//        if (readyCount == 0) {
-//          throw new RuntimeException("Bug!Zero channels selected!");
-//        }
-        //System.out.println(readyCount+" channels ready!");
-      } catch (IOException e1) {
-        throw new RuntimeException(e1);
+      selector.select();
+      if (cancelled) {
+        return;
       }
-      List<Channel> readList = new ArrayList(this.readRequiredList);
+      List<Channel> readList = new ArrayList<>(this.readRequiredList);
       this.readRequiredList.clear();
-      for(Channel r:readList){
-        r.handleRead();
+      for (Channel r : readList) {
+        execChannelBusiness(r, r::handleRead);
       }
-      List<Channel> writeList = new ArrayList(this.writeRequiredList);
+      List<Channel> writeList = new ArrayList<>(this.writeRequiredList);
       this.writeRequiredList.clear();
-      for(Channel w:writeList){
-        w.handleWrite();
+      for (Channel w : writeList) {
+        execChannelBusiness(w, w::handleWrite);
       }
       Set<SelectionKey> selectionKeys = selector.selectedKeys();
       Iterator<SelectionKey> iter = selectionKeys.iterator();
@@ -158,19 +150,16 @@ public class ChannelHost implements Host {
         if (!key.isValid()) {
           continue;
         }
-        
         if (key.isAcceptable()) {
           ServerSocketChannel nssc = (ServerSocketChannel) key.channel();
-          try {
-            SocketChannel sc = nssc.accept();
-            if (sc == null) {
-              continue;
-            }
-            ((ServerChannel) channels.get(nssc)).accept(sc);
-          } catch (IOException e) {
-            //TODO handle exception
-            throw new RuntimeException(e);
+          SocketChannel sc = nssc.accept();
+          if (sc == null) {
+            continue;
           }
+          sc.configureBlocking(false);
+          Channel ch = createChannel(sc);
+          ServerChannel serverChannel = (ServerChannel) channels.get(nssc);
+          execChannelBusiness(ch, () -> serverChannel.accepted(ch));
         } else {
           try{
             this.onSocketChannelKey(key);
@@ -179,6 +168,17 @@ public class ChannelHost implements Host {
           }
         }
       }
+    }
+  }
+
+  private boolean execChannelBusiness(Channel channel, Runnable businessCallback) {
+    try {
+      businessCallback.run();
+      return true;
+    } catch (Throwable ex) {
+      exceptionHandler.handleException(channel, ex);
+      channel.close();
+      return false;
     }
   }
 
@@ -206,21 +206,24 @@ public class ChannelHost implements Host {
   }
 
   @Override
-  public Channel createChannel() throws IOException {
+  @SneakyThrows
+  public Channel createChannel() {
     SocketChannel sc = SocketChannel.open();
     sc.configureBlocking(false);
     return createChannel(sc);
   }
 
   @Override
-  public Channel createChannel(SocketChannel sc) throws ClosedChannelException {
+  @SneakyThrows
+  public Channel createChannel(SocketChannel sc){
     Channel ch = new Channel(sc, this);
     this.hostChannel(ch);
     return ch;
   }
 
   @Override
-  public ServerChannel createServerChannel(SocketAddress endpoint, AcceptHandler acceptHandler) throws IOException {
+  @SneakyThrows
+  public ServerChannel createServerChannel(SocketAddress endpoint, AcceptHandler acceptHandler) {
     ServerChannel sc = ServerChannel.create(this, acceptHandler);
     sc.bind(endpoint);
     this.hostChannel(sc);

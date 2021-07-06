@@ -33,14 +33,14 @@ public class SSLCodec implements Codec {
     final SSLSession session = new SSLSession(channel, sslEngine, progress);
     channel.read(new ReadTask() {
       @Override
-      public boolean handleRead(Channel channel, IOBuffer buffer) throws Exception {
+      public boolean handleRead(Channel channel, IOBuffer buffer) {
         session.handshakeRead(buffer);
         return session.isHandshaked();
       }
     });
     channel.write(new WriteTask() {
       @Override
-      public boolean handleWrite(Channel channel, IOBuffer buffer) throws Exception {
+      public boolean handleWrite(Channel channel, IOBuffer buffer) {
         session.handshakeWrite(buffer);
         return session.isHandshaked();
       }

@@ -4,6 +4,6 @@ import java.nio.channels.SelectableChannel;
 
 public interface Hostable {
 
-    public SelectableChannel getSelectableChannel();
+    SelectableChannel getSelectableChannel();
 
 }

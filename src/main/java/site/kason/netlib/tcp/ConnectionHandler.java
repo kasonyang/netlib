@@ -5,12 +5,12 @@ package site.kason.netlib.tcp;
  */
 public interface ConnectionHandler {
     
-    public void channelConnected(Channel ch);
+    void channelConnected(Channel ch);
     
     //public void connectionClosed(Channel ch);
     
-    public void channelConnectFailed(Channel ch,Exception ex);
+    void channelConnectFailed(Channel ch, Exception ex);
     
-    public void channelClosed(Channel ch);
+    void channelClosed(Channel ch);
 
 }

@@ -42,9 +42,7 @@ public class ServerChannel implements Hostable {
     return this.ssc;
   }
 
-  public void accept(SocketChannel sc) throws IOException {
-    sc.configureBlocking(false);
-    Channel ch = host.createChannel(sc);
+  public void accepted(Channel ch) {
     if (this.acceptHandler != null) {
       this.acceptHandler.accepted(ch);
     }

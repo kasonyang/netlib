@@ -1,5 +1,6 @@
 package site.kason.netlib.ssl;
 
+import lombok.SneakyThrows;
 import site.kason.netlib.io.BufferUnderflowException;
 import site.kason.netlib.io.IOBuffer;
 import site.kason.netlib.tcp.Channel;
@@ -67,7 +68,7 @@ public class SSLSession {
     this.encrypt(in, out);
   }
 
-  public void handshakeRead(IOBuffer in) throws IOException {
+  public void handshakeRead(IOBuffer in) {
     if (isHandshaked()) {
       return;
     }
@@ -83,7 +84,7 @@ public class SSLSession {
     }
   }
 
-  public void handshakeWrite(IOBuffer out) throws SSLException, IOException {
+  public void handshakeWrite(IOBuffer out) {
     if (isHandshaked()) {
       return;
     }
@@ -102,7 +103,8 @@ public class SSLSession {
     }
   }
 
-  private void prepareNextOperationOfHandshake(HandshakeStatus hs) throws IOException {
+  @SneakyThrows
+  private void prepareNextOperationOfHandshake(HandshakeStatus hs) {
     ByteBuffer readBuffer = ByteBuffer.wrap(handshakeReadBuffer.array(), handshakeReadBuffer.getReadPosition(), handshakeReadBuffer.getReadableSize());
     ByteBuffer writeBuffer = ByteBuffer.wrap(handshakeWriteBuffer.array(), handshakeWriteBuffer.getWritePosition(), handshakeWriteBuffer.getWritableSize());
     if (hs == HandshakeStatus.NEED_TASK) {
@@ -131,7 +133,7 @@ public class SSLSession {
     }
   }
 
-  private void handleResult(SSLEngineResult result) throws IOException {
+  private void handleResult(SSLEngineResult result) {
     int byteConsumed = result.bytesConsumed();
     int byteProduced = result.bytesProduced();
     if (byteConsumed > 0) {
