@@ -57,22 +57,21 @@ public class ChannelHostTest {
     );
   }
 
-  public void doTest(int port, final CodecFactory serverCodecFactory,final CodecFactory clientCodecFactory) throws Exception {
+  private void doTest(int port, final CodecFactory serverCodecFactory, final CodecFactory clientCodecFactory) throws Exception {
     final byte[] data = new byte[]{3, 4, 5, 6, 7, 8, 9, 3, 7, 9, 3};
-    final ChannelHost atcp = ChannelHost.create();
+    final ChannelHost host = ChannelHost.create();
     SocketAddress addr = new InetSocketAddress(port);
-    Channel client = atcp.createChannel();
-    final ExceptionHandler exh = (ch, ex) -> {
+    Channel client = host.createChannel();
+    host.setExceptionHandler((ch, ex) -> {
       if(ex instanceof StopException){
         ch.close();
       }else{
         throw new RuntimeException(ex);
       }
-    };
-    atcp.setExceptionHandler(exh);
-    client.setConnectionHandler(new ConnectionHandler() {
+    });
+    client.addConnectionListener(new ConnectionListener() {
       @Override
-      public void channelConnected(final Channel ch) {
+      public void onChannelConnected(final Channel ch) {
         log("client:connected");
         AtomicBoolean written = new AtomicBoolean(false);
         ch.write(new ByteWriteTask(data, 0, data.length) {
@@ -89,7 +88,6 @@ public class ChannelHostTest {
             Assert.assertTrue(written.get());
             if(counter<3){//test prepareRead even if no new data arrived
               counter++;
-              //channel.prepareRead();
               return false;
             }
             int rlen = b.getReadableSize();
@@ -100,33 +98,30 @@ public class ChannelHostTest {
             b.poll(receivedData);
             assertArrayEquals(data, receivedData);
             throw new StopException();
-            //atcp.stopListen();
-            //return true;
           }
 
         });
       }
 
       @Override
-      public void channelConnectFailed(Channel ch, Exception ex) {
+      public void onChannelConnectFailed(Channel ch, Exception ex) {
         fail("client:connection failed");
       }
 
       @Override
-      public void channelClosed(Channel ch) {
+      public void onChannelClosed(Channel ch) {
         log("channel closed:" + ch);
-        atcp.stopListen();
+        host.stopListen();
       }
 
     });
-    atcp.createServerChannel(addr, ch -> {
+    host.createServerChannel(addr, ch -> {
       if(serverCodecFactory!=null){
         for(Codec c:serverCodecFactory.createCodecs(ch)){
           ch.addCodec(c);
         }
       }
       log("server accepted:" + ch.toString());
-      //final IOBuffer readBuffer = IOBuffer.createFromKeyStore(data.length);
       ch.read((self, readBuffer) -> {
         log("server read");
         int readSize = readBuffer.getReadableSize();
@@ -140,11 +135,10 @@ public class ChannelHostTest {
           readBuffer.poll(receivedData);
           assertArrayEquals(data, receivedData);
           self.write(new ByteWriteTask(receivedData, 0, receivedData.length));
-          //atcp.stopListen();
           return true;
-        } else {
-          return false;
         }
+        return false;
+
       });
     });
     client.connect(addr);
@@ -153,8 +147,7 @@ public class ChannelHostTest {
         client.addCodec(c);
       }
     }
-    atcp.listen();
-    //server.close();
+    host.listen();
     client.close();
   }
   

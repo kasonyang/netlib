@@ -32,7 +32,7 @@ public class Channel implements Hostable {
 
   private CodecInitProgress codecInitProgress;
 
-  protected ConnectionHandler connectionHandler;
+  protected List<ConnectionListener> connectionListener = new LinkedList<>();
 
   private boolean closed = false;
   
@@ -79,8 +79,8 @@ public class Channel implements Hostable {
     }
     this.closed = true;
     try {
-      if (connectionHandler != null) {
-        connectionHandler.channelClosed(this);
+      for (ConnectionListener cl : connectionListener) {
+        cl.onChannelClosed(this);
       }
     } finally {
       host.closeChannel(this);
@@ -209,12 +209,8 @@ public class Channel implements Hostable {
     host.prepareConnect(this);
   }
 
-  public ConnectionHandler getConnectionHandler() {
-    return connectionHandler;
-  }
-
-  public void setConnectionHandler(ConnectionHandler connectionHandler) {
-    this.connectionHandler = connectionHandler;
+  public void addConnectionListener(ConnectionListener connectionListener) {
+    this.connectionListener.add(connectionListener);
   }
 
   public void installFilter(ChannelFilter filter) {
@@ -252,14 +248,14 @@ public class Channel implements Hostable {
   }
 
   public void handleConnected() {
-    if (connectionHandler != null) {
-      connectionHandler.channelConnected(this);
+    for (ConnectionListener cl : connectionListener) {
+      cl.onChannelConnected(this);
     }
   }
 
   public void handleConnectFailed(IOException ex) {
-    if (connectionHandler != null) {
-      connectionHandler.channelConnectFailed(this, ex);
+    for (ConnectionListener cl : connectionListener) {
+      cl.onChannelConnectFailed(this, ex);
     }
   }
 
