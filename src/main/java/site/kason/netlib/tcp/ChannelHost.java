@@ -3,6 +3,7 @@ package site.kason.netlib.tcp;
 import lombok.SneakyThrows;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.channels.*;
 import java.util.*;
@@ -228,6 +229,14 @@ public class ChannelHost implements Host {
     sc.bind(endpoint);
     this.hostChannel(sc);
     return sc;
+  }
+
+  public ServerChannel createServerChannel(String host, int port, AcceptHandler acceptHandler) {
+    return createServerChannel(new InetSocketAddress(host, port), acceptHandler);
+  }
+
+  public ServerChannel createServerChannel(int port, AcceptHandler acceptHandler) {
+    return createServerChannel(new InetSocketAddress(port), acceptHandler);
   }
 
 }

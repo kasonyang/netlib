@@ -8,6 +8,7 @@ import site.kason.netlib.tcp.pipeline.Pipeline;
 import site.kason.netlib.tcp.pipeline.Processor;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectableChannel;
@@ -18,21 +19,21 @@ import java.util.Queue;
 
 public class Channel implements Hostable {
 
-  Host host;
+  private Host host;
 
-  SocketChannel socketChannel;
+  private SocketChannel socketChannel;
 
-  protected final List<WriteTask> writeTasks = new LinkedList<WriteTask>();
+  private final List<WriteTask> writeTasks = new LinkedList<>();
 
-  protected final List<ReadTask> readTasks = new LinkedList<ReadTask>();
+  private final List<ReadTask> readTasks = new LinkedList<>();
 
-  private List<ChannelFilter> filters = new LinkedList<ChannelFilter>();
+  private List<ChannelFilter> filters = new LinkedList<>();
 
-  private final Queue<Codec> codecInitQueue = new LinkedList<Codec>();
+  private final Queue<Codec> codecInitQueue = new LinkedList<>();
 
   private CodecInitProgress codecInitProgress;
 
-  protected List<ConnectionListener> connectionListener = new LinkedList<>();
+  private List<ConnectionListener> connectionListener = new LinkedList<>();
 
   private boolean closed = false;
   
@@ -57,11 +58,15 @@ public class Channel implements Hostable {
    *
    * @param remote the remote address to connect
    * @return true if no io exception occurs
-   * @throws IOException if some i/o error occurs
    */
-  public boolean connect(SocketAddress remote) throws IOException {
+  @SneakyThrows
+  public boolean connect(SocketAddress remote) {
     host.prepareConnect(this);
     return this.socketChannel.connect(remote);
+  }
+
+  public boolean connect(String host, int port){
+    return connect(new InetSocketAddress(host, port));
   }
 
   public SocketChannel socketChannel() {
@@ -247,13 +252,13 @@ public class Channel implements Hostable {
     return this.encodePipeline.getOutBuffer().getReadableSize()>0;
   }
 
-  public void handleConnected() {
+  protected void handleConnected() {
     for (ConnectionListener cl : connectionListener) {
       cl.onChannelConnected(this);
     }
   }
 
-  public void handleConnectFailed(IOException ex) {
+  protected void handleConnectFailed(IOException ex) {
     for (ConnectionListener cl : connectionListener) {
       cl.onChannelConnectFailed(this, ex);
     }
