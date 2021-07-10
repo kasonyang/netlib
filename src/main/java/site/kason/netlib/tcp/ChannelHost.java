@@ -16,7 +16,11 @@ public class ChannelHost implements Host {
 
   private ExceptionHandler exceptionHandler = (ch, ex) -> {
     Logger.getLogger(ChannelHost.class.getName()).log(Level.SEVERE, null, ex);
-    ch.close();
+    try {
+      ch.close();
+    } catch (Throwable closeEx){
+      Logger.getLogger(ChannelHost.class.getName()).log(Level.SEVERE, null, closeEx);
+    }
   };
 
   private boolean cancelled = false;
@@ -178,7 +182,6 @@ public class ChannelHost implements Host {
       return true;
     } catch (Throwable ex) {
       exceptionHandler.handleException(channel, ex);
-      channel.close();
       return false;
     }
   }
