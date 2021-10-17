@@ -44,10 +44,16 @@ public class IOBuffer {
     push0(data, 0, data.length);
   }
 
-  public void push(IOBuffer src) {
+  /**
+   * push data from other buffer
+   * @param src the source buffer
+   * @return the bytes pushed
+   */
+  public int push(IOBuffer src) {
     int size = Math.min(this.getWritableSize(), src.getReadableSize());
     this.push(src.array(), src.getReadPosition(), size);
     src.moveReadPosition(size);
+    return size;
   }
 
   public void peek(byte[] dest, int offset, int length) {
