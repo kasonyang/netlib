@@ -31,7 +31,7 @@ public class ChannelHostTest {
   public void testSSL() throws Exception {
     //SSLChannel svr = SSLChannelFactory.createFromKeyStore(true,keyStore,trustStore,pwd);
     doTest(
-        9001,
+        9101,
         ch -> Collections.singletonList(createSSLCodec(false)),
         ch -> Collections.singletonList(createSSLCodec(true))
     );
@@ -39,13 +39,13 @@ public class ChannelHostTest {
 
   @Test
   public void test() throws Exception {
-    doTest(9002, null,null);
+    doTest(9102, null,null);
   }
   
   @Test
   public void testDeflate() throws Exception{
     CodecFactory cf = ch -> Collections.singletonList((Codec) new DeflateCodec());
-    doTest(9003,cf,cf);
+    doTest(9103,cf,cf);
   }
   
   @Test

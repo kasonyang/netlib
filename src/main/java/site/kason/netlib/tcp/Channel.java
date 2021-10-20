@@ -204,7 +204,8 @@ public class Channel implements Hostable {
       }
       if (readCallbacks.isEmpty()) {
         pauseRead();
-      } else {
+      } else if (out.getReadableSize() > 0 && !host.isReadPaused(this)) {
+        // call continueRead to wakeup selector
         continueRead();
       }
     }

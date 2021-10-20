@@ -59,6 +59,11 @@ public class ChannelHost implements Host {
   }
 
   @Override
+  public boolean isWritePaused(Channel ch) {
+    return !isInterest(ch, SelectionKey.OP_WRITE);
+  }
+
+  @Override
   public void continueRead(Channel ch) {
     if(ch.isReadable()){
       this.readRequiredList.add(ch);
@@ -73,12 +78,29 @@ public class ChannelHost implements Host {
     this.interest(ch, SelectionKey.OP_READ, false);
   }
 
+  @Override
+  public boolean isReadPaused(Channel ch) {
+    return !isInterest(ch, SelectionKey.OP_READ);
+  }
+
   protected ChannelHost() throws IOException {
     selector = Selector.open();
   }
 
   public void setExceptionHandler(ExceptionHandler exceptionHandler) {
     this.exceptionHandler = exceptionHandler;
+  }
+
+  private boolean isInterest(Channel ch, int key) {
+    SocketChannel sc = ch.socketChannel();
+    SelectionKey selectionKey = sc.keyFor(selector);
+    try{
+      int ops = selectionKey.interestOps();
+      return (ops & key) != 0;
+    }catch(CancelledKeyException ex){
+      //ignore it
+      return false;
+    }
   }
 
   private void interest(Channel ch, int key, boolean interest) {

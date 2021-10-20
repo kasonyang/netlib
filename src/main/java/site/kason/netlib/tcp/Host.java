@@ -8,10 +8,14 @@ public interface Host {
     void continueWrite(Channel ch);
 
     void pauseWrite(Channel ch);
+
+    boolean isWritePaused(Channel ch);
     
     void continueRead(Channel ch);
 
     void pauseRead(Channel ch);
+
+    boolean isReadPaused(Channel ch);
     
     void prepareConnect(Channel ch);
 
