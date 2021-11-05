@@ -106,6 +106,9 @@ public class ChannelHost implements Host {
   private void interest(Channel ch, int key, boolean interest) {
     SocketChannel sc = ch.socketChannel();
     SelectionKey selectionKey = sc.keyFor(selector);
+    if (selectionKey == null) {
+      return;
+    }
     try{
       int ops = selectionKey.interestOps();
       if (interest) {
