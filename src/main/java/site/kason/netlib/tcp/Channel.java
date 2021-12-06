@@ -36,8 +36,14 @@ public class Channel implements Hostable {
   private List<ConnectionListener> connectionListener = new LinkedList<>();
 
   private boolean closed = false;
-  
-  private boolean closePending = false;
+
+  private final static int RS_READING = 0;
+  private final static int RS_COMPLETE_PENDING = 1;
+  private final static int RS_COMPLETED = 2;
+  /**
+   * read state,0=reading,1=completePending,2=completed
+   */
+  private int readState = 0;
 
   private boolean pauseWritePending = false;
 
@@ -75,7 +81,6 @@ public class Channel implements Hostable {
 
   @SneakyThrows
   public void close(){
-    this.closePending = false;
     if (this.closed) {
       return;
     }
@@ -182,16 +187,19 @@ public class Channel implements Hostable {
     IOBuffer in = decodePipeline.getInBuffer();
     IOBuffer out = decodePipeline.getOutBuffer();
     ByteBuffer byteBuffer = ByteBuffer.wrap(in.array(), in.getWritePosition(), in.getWritableSize());
-    int rlen = sc.read(byteBuffer);
-    if (rlen == -1) {
-      this.closePending = true;
-    } else if (rlen > 0) {
-      in.setWritePosition(in.getWritePosition() + rlen);
+    if (this.readState == RS_READING) {
+      int rlen = sc.read(byteBuffer);
+      if (rlen == -1) {
+        this.readState = RS_COMPLETE_PENDING;
+      } else if (rlen > 0) {
+        in.setWritePosition(in.getWritePosition() + rlen);
+      }
     }
     decodePipeline.process();
     if (out.getReadableSize() <= 0) {//no data for read
-      if (this.closePending) {
-        this.close();
+      if (this.readState == RS_COMPLETE_PENDING) {
+        this.readState = RS_COMPLETED;
+        this.handleReadCompleted();
       }
       return;
     }
@@ -262,6 +270,12 @@ public class Channel implements Hostable {
   protected void handleConnectFailed(IOException ex) {
     for (ConnectionListener cl : connectionListener) {
       cl.onChannelConnectFailed(this, ex);
+    }
+  }
+
+  protected void handleReadCompleted() {
+    for (ConnectionListener cl : connectionListener) {
+      cl.onReadCompleted(this);
     }
   }
 

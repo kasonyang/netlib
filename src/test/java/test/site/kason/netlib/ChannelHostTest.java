@@ -114,6 +114,10 @@ public class ChannelHostTest {
         host.stopListen();
       }
 
+      public void onReadCompleted(Channel ch) {
+        log("channel read completed:" + ch);
+      }
+
     });
     host.createServerChannel(addr, ch -> {
       if(serverCodecFactory!=null){

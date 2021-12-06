@@ -13,4 +13,6 @@ public interface ConnectionListener {
     
     void onChannelClosed(Channel ch);
 
+    void onReadCompleted(Channel ch);
+
 }
