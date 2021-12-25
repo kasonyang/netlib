@@ -1,25 +1,26 @@
 package site.kason.netlib.tcp;
 
 import lombok.SneakyThrows;
+import site.kason.netlib.util.Logger;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.channels.*;
 import java.util.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 public class ChannelHost implements Host {
+
+  private static Logger LOG = Logger.getLogger(ChannelHost.class);
 
   Selector selector;
 
   private ExceptionHandler exceptionHandler = (ch, ex) -> {
-    Logger.getLogger(ChannelHost.class.getName()).log(Level.SEVERE, null, ex);
+    LOG.error(ex);
     try {
       ch.close();
     } catch (Throwable closeEx){
-      Logger.getLogger(ChannelHost.class.getName()).log(Level.SEVERE, null, closeEx);
+      LOG.error(closeEx);
     }
   };
 
@@ -45,16 +46,13 @@ public class ChannelHost implements Host {
 
   @Override
   public void continueWrite(Channel ch) {
-    if(ch.isWritable()){
-      this.writeRequiredList.add(ch);
-      selector.wakeup();
-    }else{
-      this.interest(ch, SelectionKey.OP_WRITE, true);
-    }
+    LOG.debug("%s: continue write", ch);
+    this.interest(ch, SelectionKey.OP_WRITE, true);
   }
 
   @Override
   public void pauseWrite(Channel ch) {
+    LOG.debug("%s: pause write", ch);
     this.interest(ch, SelectionKey.OP_WRITE, false);
   }
 
@@ -65,6 +63,7 @@ public class ChannelHost implements Host {
 
   @Override
   public void continueRead(Channel ch) {
+    LOG.debug("%s: continue read", ch);
     if(ch.isReadable()){
       this.readRequiredList.add(ch);
       selector.wakeup();
@@ -75,6 +74,7 @@ public class ChannelHost implements Host {
 
   @Override
   public void pauseRead(Channel ch) {
+    LOG.debug("%s: pause read", ch);
     this.interest(ch, SelectionKey.OP_READ, false);
   }
 
@@ -232,6 +232,7 @@ public class ChannelHost implements Host {
     channels.remove(sc);
     socketChannels.remove(channel);
     sc.keyFor(selector).cancel();
+    LOG.debug("%s closed", channel);
   }
 
   @Override

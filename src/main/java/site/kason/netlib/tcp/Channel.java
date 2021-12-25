@@ -141,7 +141,7 @@ public class Channel implements Hostable {
   }
 
   @SneakyThrows
-  protected void handleWrite() {
+  protected synchronized void handleWrite() {
     SocketChannel sc = this.socketChannel;
     IOBuffer out = encodePipeline.getOutBuffer();
     encodePipeline.process();
@@ -182,7 +182,7 @@ public class Channel implements Hostable {
   }
 
   @SneakyThrows
-  protected void handleRead() {
+  protected synchronized void handleRead() {
     SocketChannel sc = this.socketChannel;
     IOBuffer in = decodePipeline.getInBuffer();
     IOBuffer out = decodePipeline.getOutBuffer();
