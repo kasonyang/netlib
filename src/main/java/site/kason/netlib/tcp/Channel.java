@@ -6,6 +6,7 @@ import site.kason.netlib.tcp.pipeline.Codec;
 import site.kason.netlib.tcp.pipeline.CodecInitProgress;
 import site.kason.netlib.tcp.pipeline.Pipeline;
 import site.kason.netlib.tcp.pipeline.Processor;
+import site.kason.netlib.util.Logger;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -19,7 +20,13 @@ import java.util.Queue;
 
 public class Channel implements Hostable {
 
+  private static int ID_COUNTER = 0;
+
+  private final static Logger LOG = Logger.getLogger(Channel.class);
+
   private Host host;
+
+  private int id;
 
   private SocketChannel socketChannel;
 
@@ -56,6 +63,7 @@ public class Channel implements Hostable {
   protected Channel(SocketChannel socketChannel, Host host) {
     this.socketChannel = socketChannel;
     this.host = host;
+    this.id = ID_COUNTER++;
   }
 
   /**
@@ -67,6 +75,7 @@ public class Channel implements Hostable {
    */
   @SneakyThrows
   public boolean connect(SocketAddress remote) {
+    LOG.debug("%s: connecting %s", this, remote);
     host.prepareConnect(this);
     return this.socketChannel.connect(remote);
   }
@@ -154,6 +163,7 @@ public class Channel implements Hostable {
     if (writtenTask != null) {
       WriteTask wt = writtenTask;
       writtenTask = null;
+      LOG.debug("%s: calling handleWritten: %s", this, wt);
       wt.handleWritten(this);
     }
     if (pauseWritePending) {
@@ -163,12 +173,15 @@ public class Channel implements Hostable {
     }
     List<WriteTask> writeCallbacks = this.writeTasks;
     if (writeCallbacks.isEmpty()) {
+      LOG.debug("%s: no more write tasks", this);
       pauseWrite();
       return;
     }
     WriteTask cb = writeCallbacks.get(0);
+    LOG.debug("%s: calling write task %s", this, cb);
     boolean writeFinished = cb.handleWrite(this, encodePipeline.getInBuffer());
     if (writeFinished) {
+      LOG.debug("%s: write task finished: %s", this, cb);
       writtenTask = writeCallbacks.remove(0);
     }
   }
@@ -183,12 +196,14 @@ public class Channel implements Hostable {
 
   @SneakyThrows
   protected synchronized void handleRead() {
+    LOG.debug("%s: handle read", this);
     SocketChannel sc = this.socketChannel;
     IOBuffer in = decodePipeline.getInBuffer();
     IOBuffer out = decodePipeline.getOutBuffer();
     ByteBuffer byteBuffer = ByteBuffer.wrap(in.array(), in.getWritePosition(), in.getWritableSize());
     if (this.readState == RS_READING) {
       int rlen = sc.read(byteBuffer);
+      LOG.debug("%s: receive %d bytes",this, rlen);
       if (rlen == -1) {
         this.readState = RS_COMPLETE_PENDING;
       } else if (rlen > 0) {
@@ -197,8 +212,11 @@ public class Channel implements Hostable {
     }
     decodePipeline.process();
     if (out.getReadableSize() <= 0) {//no data for read
+      LOG.debug("%s: readable is 0", this);
       if (this.readState == RS_COMPLETE_PENDING) {
         this.readState = RS_COMPLETED;
+        LOG.debug("%s: read state: RS_COMPLETED", this);
+        pauseRead();
         this.handleReadCompleted();
       }
       return;
@@ -206,16 +224,21 @@ public class Channel implements Hostable {
     List<ReadTask> readCallbacks = readTasks;
     if (readCallbacks.size() > 0) {
       ReadTask cb = readCallbacks.get(0);
+      LOG.debug("%s: calling read task %s", this, cb);
       boolean readFinished = cb.handleRead(this, out);
       if (readFinished) {
+        LOG.debug("%s: read task finished: %s", this, cb);
         readCallbacks.remove(0);
       }
       if (readCallbacks.isEmpty()) {
+        LOG.debug("%s: no more read tasks", this);
         pauseRead();
       } else if (out.getReadableSize() > 0 && !host.isReadPaused(this)) {
         // call continueRead to wakeup selector
         continueRead();
       }
+    } else {
+      LOG.debug("%s: no read tasks", this);
     }
   }
 
@@ -234,10 +257,7 @@ public class Channel implements Hostable {
 
   @Override
   public String toString() {
-    if (socketChannel != null) {
-      return String.valueOf(socketChannel.socket());
-    }
-    return "";
+    return "Channel#" + id;
   }
 
   public int getWriteTaskCount() {
@@ -249,8 +269,14 @@ public class Channel implements Hostable {
   }
   
   public void addCodec(Codec codec){
-    codecInitQueue.add(codec);
-    initCodec();
+    Processor encoder = codec.getEncoder();
+    Processor decoder = codec.getDecoder();
+    if (encoder != null) {
+      this.encodePipeline.addProcessor(encoder);
+    }
+    if (decoder != null) {
+      this.decodePipeline.addProcessor(0, decoder);
+    }
   }
   
   public boolean isReadable(){
@@ -262,6 +288,7 @@ public class Channel implements Hostable {
   }
 
   protected void handleConnected() {
+    LOG.debug("channel connected: %s %s", this, socketChannel);
     for (ConnectionListener cl : connectionListener) {
       cl.onChannelConnected(this);
     }
@@ -277,39 +304,6 @@ public class Channel implements Hostable {
     for (ConnectionListener cl : connectionListener) {
       cl.onReadCompleted(this);
     }
-  }
-
-  private void initCodec() {
-    if (codecInitProgress != null) {
-      return;
-    }
-    final Channel channel = this;
-    codecInitProgress = new CodecInitProgress() {
-      private Codec currentCodec;
-      @Override
-      public void done() {
-        if (currentCodec != null) {
-          Processor encoder = currentCodec.getEncoder();
-          if (encoder != null) {
-            encodePipeline.addProcessor(encoder);
-          }
-          Processor decoder = currentCodec.getDecoder();
-          if (decoder != null) {
-            decodePipeline.addProcessor(0, decoder);
-          }
-          currentCodec = null;
-        }
-        if (codecInitQueue.isEmpty()) {
-          channel.codecInitProgress = null;
-          continueRead();
-          continueWrite();
-          return;
-        }
-        currentCodec = codecInitQueue.poll();
-        currentCodec.init(channel, this);
-      }
-    };
-    codecInitProgress.done();
   }
 
 }

@@ -1,52 +1,27 @@
 package site.kason.netlib.ssl;
 
-import site.kason.netlib.io.IOBuffer;
-import site.kason.netlib.tcp.Channel;
-import site.kason.netlib.tcp.ReadTask;
-import site.kason.netlib.tcp.WriteTask;
-import site.kason.netlib.tcp.pipeline.Codec;
-import site.kason.netlib.tcp.pipeline.CodecInitProgress;
-import site.kason.netlib.tcp.pipeline.Processor;
-
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
+import site.kason.netlib.tcp.Channel;
+import site.kason.netlib.tcp.pipeline.Codec;
+import site.kason.netlib.tcp.pipeline.Processor;
 
 /**
  * @author Kason Yang
  */
 public class SSLCodec implements Codec {
 
-  private final SSLContext context;
-  private final boolean isClientMode;
-  private SSLEncodeProcessor encoder;
-  private SSLDecodeProcessor decoder;
+  private final SSLEngine sslEngine;
+  private SSLSession session;
 
-  public SSLCodec(SSLContext context, boolean isClientMode) {
-    this.context = context;
-    this.isClientMode = isClientMode;
-  }
+  private Processor encoder, decoder;
 
-  @Override
-  public void init(Channel channel, CodecInitProgress progress) {
-    SSLEngine sslEngine = context.createSSLEngine();
-    sslEngine.setUseClientMode(isClientMode);
-    final SSLSession session = new SSLSession(channel, sslEngine, progress);
-    channel.read(new ReadTask() {
-      @Override
-      public boolean handleRead(Channel channel, IOBuffer buffer) {
-        session.handshakeRead(buffer);
-        return session.isHandshaked();
-      }
-    });
-    channel.write(new WriteTask() {
-      @Override
-      public boolean handleWrite(Channel channel, IOBuffer buffer) {
-        session.handshakeWrite(buffer);
-        return session.isHandshaked();
-      }
-    });
-    encoder = new SSLEncodeProcessor(session);
-    decoder = new SSLDecodeProcessor(session);
+  public SSLCodec(Channel ch, SSLContext context, boolean clientMode) {
+    sslEngine = context.createSSLEngine();
+    sslEngine.setUseClientMode(clientMode);
+    session = new SSLSession(ch, sslEngine);
+    this.encoder = new SSLEncodeProcessor(session);
+    this.decoder = new SSLDecodeProcessor(session);
   }
 
   @Override

@@ -15,11 +15,6 @@ public class DeflateCodec implements Codec {
   DeflateDecodeProcessor decoder = new DeflateDecodeProcessor();
 
   @Override
-  public void init(Channel channel, CodecInitProgress progress) {
-    progress.done();
-  }
-
-  @Override
   public Processor getEncoder() {
     return encoder;
   }

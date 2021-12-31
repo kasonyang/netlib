@@ -32,8 +32,8 @@ public class ChannelHostTest {
     //SSLChannel svr = SSLChannelFactory.createFromKeyStore(true,keyStore,trustStore,pwd);
     doTest(
         9101,
-        ch -> Collections.singletonList(createSSLCodec(false)),
-        ch -> Collections.singletonList(createSSLCodec(true))
+        ch -> Collections.singletonList(createSSLCodec(ch,false)),
+        ch -> Collections.singletonList(createSSLCodec(ch,true))
     );
   }
 
@@ -52,8 +52,8 @@ public class ChannelHostTest {
   public void testDeflateAndSSL() throws Exception{
     doTest(
         9004,
-        ch -> Arrays.asList(createSSLCodec(false),new DeflateCodec()),
-        ch -> Arrays.asList(createSSLCodec(true),new DeflateCodec())
+        ch -> Arrays.asList(createSSLCodec(ch,false),new DeflateCodec()),
+        ch -> Arrays.asList(createSSLCodec(ch,true),new DeflateCodec())
     );
   }
 
@@ -155,13 +155,13 @@ public class ChannelHostTest {
     client.close();
   }
   
-  private Codec createSSLCodec(boolean clientMode){
+  private Codec createSSLCodec(Channel ch,boolean clientMode){
     File keyStoreFile = new File("sslclientkeys");
     //String trustStore = "sslclientkeys";
     String pwd = "net-lib";
     try{
     SSLContext context = SSLContextUtil.createFromKeyStore(keyStoreFile, pwd);
-    return new SSLCodec(context, clientMode);
+    return new SSLCodec(ch, context, clientMode);
     }catch(Exception ex){
       throw new RuntimeException(ex);
     }
