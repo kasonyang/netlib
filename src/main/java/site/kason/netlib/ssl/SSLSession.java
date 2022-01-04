@@ -31,9 +31,9 @@ public class SSLSession {
 
   private boolean finishHandshakePending = false;
 
-  private final IOBuffer handshakeWriteBuffer;
+  private IOBuffer handshakeWriteBuffer;
 
-  private final IOBuffer handshakeReadBuffer;
+  private IOBuffer handshakeReadBuffer;
 
   public SSLSession(Channel channel, SSLEngine sslEngine) {
     this.channel = channel;
@@ -72,19 +72,22 @@ public class SSLSession {
   private void handshakeRead(IOBuffer in) throws IOException {
     //System.out.println("handling unwrap:" + channel);
     //this.readToBuffer(transfer);
-    this.handshakeReadBuffer.compact();
-    this.handshakeReadBuffer.push(in);
     if (this.finishHandshakePending) {
       this.finishHandshake();
     } else {
+      this.handshakeReadBuffer.compact();
+      this.handshakeReadBuffer.push(in);
       this.prepareNextOperationOfHandshake(sslEngine.getHandshakeStatus());
     }
   }
 
   private void handshakeWrite(IOBuffer out) throws SSLException, IOException {
     //System.out.println("handling wrap:" + channel);
-    this.handshakeWriteBuffer.compact();
-    out.push(this.handshakeWriteBuffer);
+    if (handshakeWriteBuffer.getReadableSize() > 0) {
+      out.push(this.handshakeWriteBuffer);
+      this.handshakeWriteBuffer.compact();
+      return;
+    }
     if (this.finishHandshakePending) {
       this.finishHandshake();
     } else {
@@ -157,6 +160,25 @@ public class SSLSession {
   }
 
   private void decrypt(IOBuffer source, IOBuffer dest) throws SSLException {
+    if (handshakeReadBuffer != null) {
+      handshakeReadBuffer.compact();
+      int remainingLen = handshakeReadBuffer.getReadableSize();
+      int pushedLen =  handshakeReadBuffer.push(source);
+      source.moveReadPosition(-pushedLen);
+      this._decrypt(handshakeReadBuffer, dest);
+      int consumedLen = remainingLen + pushedLen - handshakeReadBuffer.getReadableSize();
+      if (consumedLen < remainingLen) {
+        handshakeReadBuffer.moveWritePosition(-pushedLen);
+      } else {
+        handshakeReadBuffer = null;
+        source.moveReadPosition(consumedLen - remainingLen);
+      }
+    } else {
+      this._decrypt(source, dest);
+    }
+  }
+
+  private void _decrypt(IOBuffer source, IOBuffer dest) throws SSLException {
     ByteBuffer srcBf = ByteBuffer.wrap(source.array(), source.getReadPosition(), source.getReadableSize());
     ByteBuffer outBf = ByteBuffer.wrap(dest.array(), dest.getWritePosition(), dest.getWritableSize());
     SSLEngineResult res = sslEngine.unwrap(srcBf, outBf);
