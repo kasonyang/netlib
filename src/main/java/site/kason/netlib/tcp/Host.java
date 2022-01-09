@@ -5,19 +5,19 @@ import java.nio.channels.SocketChannel;
 
 public interface Host {
 
-    void continueWrite(Channel ch);
+    void registerWrite(Channel ch);
 
-    void pauseWrite(Channel ch);
+    void unregisterWrite(Channel ch);
 
-    boolean isWritePaused(Channel ch);
+    boolean isWriteRegistered(Channel ch);
     
-    void continueRead(Channel ch);
+    void registerRead(Channel ch);
 
-    void pauseRead(Channel ch);
+    void unregisterRead(Channel ch);
 
-    boolean isReadPaused(Channel ch);
+    boolean isReadRegistered(Channel ch);
     
-    void prepareConnect(Channel ch);
+    void requestConnect(Channel ch);
 
     Channel createChannel();
     

@@ -8,6 +8,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.channels.*;
 import java.util.*;
+import java.util.function.Supplier;
 
 public class ChannelHost implements Host {
 
@@ -29,10 +30,10 @@ public class ChannelHost implements Host {
   private HashMap<SelectableChannel, Hostable> channels = new HashMap<>();
 
   private HashMap<Hostable, SelectableChannel> socketChannels = new HashMap<>();
-  
-  private List<Channel> readRequiredList = new LinkedList<>();
-  
-  private List<Channel> writeRequiredList = new LinkedList<>();
+
+  private Set<Channel> readQueue = new LinkedHashSet<>();
+
+  private Set<Channel> writeQueue = new LinkedHashSet<>();
 
   //private ByteBuffer readBuffer = ByteBuffer.allocate(40960);
   public static ChannelHost create() throws IOException {
@@ -40,47 +41,46 @@ public class ChannelHost implements Host {
   }
 
   @Override
-  public void prepareConnect(Channel ch) {
+  public void requestConnect(Channel ch) {
     this.interest(ch, SelectionKey.OP_CONNECT, true);
   }
 
   @Override
-  public void continueWrite(Channel ch) {
+  public void registerWrite(Channel ch) {
     LOG.debug("%s: continue write", ch);
     this.interest(ch, SelectionKey.OP_WRITE, true);
   }
 
   @Override
-  public void pauseWrite(Channel ch) {
+  public void unregisterWrite(Channel ch) {
     LOG.debug("%s: pause write", ch);
     this.interest(ch, SelectionKey.OP_WRITE, false);
   }
 
   @Override
-  public boolean isWritePaused(Channel ch) {
-    return !isInterest(ch, SelectionKey.OP_WRITE);
+  public boolean isWriteRegistered(Channel ch) {
+    return isInterest(ch, SelectionKey.OP_WRITE);
   }
 
   @Override
-  public void continueRead(Channel ch) {
+  public void registerRead(Channel ch) {
     LOG.debug("%s: continue read", ch);
-    if(ch.isReadable()){
-      this.readRequiredList.add(ch);
+    if (!this.isInterest(ch, SelectionKey.OP_READ)) {
+      this.readQueue.add(ch);
       selector.wakeup();
-    }else{
-      this.interest(ch, SelectionKey.OP_READ, true);
     }
+    this.interest(ch, SelectionKey.OP_READ, true);
   }
 
   @Override
-  public void pauseRead(Channel ch) {
-    LOG.debug("%s: pause read", ch);
+  public void unregisterRead(Channel ch) {
+    LOG.debug("%s: unregister read", ch);
     this.interest(ch, SelectionKey.OP_READ, false);
   }
 
   @Override
-  public boolean isReadPaused(Channel ch) {
-    return !isInterest(ch, SelectionKey.OP_READ);
+  public boolean isReadRegistered(Channel ch) {
+    return isInterest(ch, SelectionKey.OP_READ);
   }
 
   protected ChannelHost() throws IOException {
@@ -133,14 +133,10 @@ public class ChannelHost implements Host {
     SocketChannel sc = (SocketChannel) key.channel();
     Channel ch = (Channel) channels.get(sc);
     if (key.isReadable()) {
-      if (!execChannelBusiness(ch, ch::handleRead)) {
-        return;
-      }
+      readQueue.add(ch);
     }
     if (key.isWritable()) {
-      if (!execChannelBusiness(ch, ch::handleWrite)) {
-        return;
-      }
+      writeQueue.add(ch);
     }
     if (key.isConnectable()) {
       this.interest(ch, SelectionKey.OP_CONNECT, false);
@@ -161,16 +157,6 @@ public class ChannelHost implements Host {
       selector.select();
       if (cancelled) {
         return;
-      }
-      List<Channel> readList = new ArrayList<>(this.readRequiredList);
-      this.readRequiredList.clear();
-      for (Channel r : readList) {
-        execChannelBusiness(r, r::handleRead);
-      }
-      List<Channel> writeList = new ArrayList<>(this.writeRequiredList);
-      this.writeRequiredList.clear();
-      for (Channel w : writeList) {
-        execChannelBusiness(w, w::handleWrite);
       }
       Set<SelectionKey> selectionKeys = selector.selectedKeys();
       Iterator<SelectionKey> iter = selectionKeys.iterator();
@@ -194,9 +180,25 @@ public class ChannelHost implements Host {
           try{
             this.onSocketChannelKey(key);
           }catch(CancelledKeyException ex){
-            
+            LOG.debug("%s: key cancelled", key.channel());
           }
         }
+      }
+      List<Channel> readList = new ArrayList<>(this.readQueue);
+      this.readQueue.clear();
+      for (Channel r : readList) {
+        ExecChannelResult<Boolean> handleResult = execChannelBusiness(r, r::handleRead);
+        if (handleResult.isSuccessful && !handleResult.value && isReadRegistered(r)) {
+          this.readQueue.add(r);
+        }
+      }
+      List<Channel> writeList = new ArrayList<>(this.writeQueue);
+      this.writeQueue.clear();
+      for (Channel w : writeList) {
+        execChannelBusiness(w, w::handleWrite);
+      }
+      if (!this.readQueue.isEmpty()) {
+        selector.wakeup();
       }
     }
   }
@@ -208,6 +210,15 @@ public class ChannelHost implements Host {
     } catch (Throwable ex) {
       exceptionHandler.handleException(channel, ex);
       return false;
+    }
+  }
+
+  private <T> ExecChannelResult<T> execChannelBusiness(Channel channel, Supplier<T> businessCallback) {
+    try {
+      return new ExecChannelResult<>(true, businessCallback.get());
+    } catch (Throwable ex) {
+      exceptionHandler.handleException(channel, ex);
+      return new ExecChannelResult<>(false, null);
     }
   }
 
@@ -225,7 +236,7 @@ public class ChannelHost implements Host {
       }
     }
   }
-  
+
   @Override
   public void closeChannel(Hostable channel){
     SelectableChannel sc = channel.getSelectableChannel();
@@ -266,6 +277,15 @@ public class ChannelHost implements Host {
 
   public ServerChannel createServerChannel(int port, AcceptHandler acceptHandler) {
     return createServerChannel(new InetSocketAddress(port), acceptHandler);
+  }
+
+  private static class ExecChannelResult<T> {
+    boolean isSuccessful;
+    T value;
+    public ExecChannelResult(boolean isSuccessful, T value) {
+      this.isSuccessful = isSuccessful;
+      this.value = value;
+    }
   }
 
 }

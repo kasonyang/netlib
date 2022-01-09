@@ -20,6 +20,10 @@ import java.util.Queue;
 
 public class Channel implements Hostable {
 
+  private static final int READ_MODE_READ_AVAILABLE = 0;
+
+  private static final int READ_MODE_READ_MORE = 1;
+
   private static int ID_COUNTER = 0;
 
   private final static Logger LOG = Logger.getLogger(Channel.class);
@@ -27,6 +31,8 @@ public class Channel implements Hostable {
   private Host host;
 
   private int id;
+
+  private int readMode;
 
   private SocketChannel socketChannel;
 
@@ -76,7 +82,7 @@ public class Channel implements Hostable {
   @SneakyThrows
   public boolean connect(SocketAddress remote) {
     LOG.debug("%s: connecting %s", this, remote);
-    host.prepareConnect(this);
+    host.requestConnect(this);
     return this.socketChannel.connect(remote);
   }
 
@@ -131,18 +137,18 @@ public class Channel implements Hostable {
   public synchronized void write(WriteTask cb) {
     cb = filterWrite(cb);
     this.writeTasks.add(cb);
-    this.continueWrite();
+    this.requestWrite();
   }
 
   public synchronized void read(ReadTask cb) {
     cb = filterRead(cb);
     this.readTasks.add(cb);
-    this.continueRead();
+    this.requestRead();
   }
 
-  public synchronized void continueWrite() {
+  public synchronized void requestWrite() {
     this.pauseWritePending = false;
-    host.continueWrite(this);
+    host.registerWrite(this);
   }
 
   public synchronized void pauseWrite() {
@@ -168,7 +174,7 @@ public class Channel implements Hostable {
     }
     if (pauseWritePending) {
       pauseWritePending = false;
-      host.pauseWrite(this);
+      host.unregisterWrite(this);
       return;
     }
     List<WriteTask> writeCallbacks = this.writeTasks;
@@ -186,20 +192,29 @@ public class Channel implements Hostable {
     }
   }
 
-  public synchronized void continueRead() {
-    host.continueRead(this);
+  public synchronized void requestRead() {
+    this._requestRead(READ_MODE_READ_AVAILABLE);
+  }
+
+  public synchronized void requestReadMore() {
+    this._requestRead(READ_MODE_READ_MORE);
   }
 
   public synchronized void pauseRead() {
-    host.pauseRead(this);
+    host.unregisterRead(this);
   }
 
+  /**
+   *
+   * @return true if no more data to handle
+   */
   @SneakyThrows
-  protected synchronized void handleRead() {
+  protected synchronized boolean handleRead() {
     LOG.debug("%s: handle read", this);
     SocketChannel sc = this.socketChannel;
     IOBuffer in = decodePipeline.getInBuffer();
     IOBuffer out = decodePipeline.getOutBuffer();
+    int oldReadableSize = out.getReadableSize();
     ByteBuffer byteBuffer = ByteBuffer.wrap(in.array(), in.getWritePosition(), in.getWritableSize());
     if (this.readState == RS_READING) {
       int rlen = sc.read(byteBuffer);
@@ -211,15 +226,16 @@ public class Channel implements Hostable {
       }
     }
     decodePipeline.process();
-    if (out.getReadableSize() <= 0) {//no data for read
-      LOG.debug("%s: readable is 0", this);
+    int newReadableSize = out.getReadableSize();
+    if (!isMatchReadMode(oldReadableSize, newReadableSize)) {
+      LOG.debug("%s: buffer change not match read mode:%d -> %d", this, oldReadableSize, newReadableSize);
       if (this.readState == RS_COMPLETE_PENDING) {
         this.readState = RS_COMPLETED;
         LOG.debug("%s: read state: RS_COMPLETED", this);
-        pauseRead();
+        host.unregisterRead(this);
         this.handleReadCompleted();
       }
-      return;
+      return true;
     }
     List<ReadTask> readCallbacks = readTasks;
     if (readCallbacks.size() > 0) {
@@ -230,20 +246,17 @@ public class Channel implements Hostable {
         LOG.debug("%s: read task finished: %s", this, cb);
         readCallbacks.remove(0);
       }
-      if (readCallbacks.isEmpty()) {
-        LOG.debug("%s: no more read tasks", this);
-        pauseRead();
-      } else if (out.getReadableSize() > 0 && !host.isReadPaused(this)) {
-        // call continueRead to wakeup selector
-        continueRead();
-      }
-    } else {
-      LOG.debug("%s: no read tasks", this);
     }
+    if (readCallbacks.isEmpty()) {
+      LOG.debug("%s: no more read tasks", this);
+      host.unregisterRead(this);
+      return true;
+    }
+    return false;
   }
 
-  public synchronized void prepareConnect() {
-    host.prepareConnect(this);
+  public synchronized void requestConnect() {
+    host.requestConnect(this);
   }
 
   public void addConnectionListener(ConnectionListener connectionListener) {
@@ -278,14 +291,6 @@ public class Channel implements Hostable {
       this.decodePipeline.addProcessor(0, decoder);
     }
   }
-  
-  public boolean isReadable(){
-    return this.decodePipeline.getOutBuffer().getReadableSize()>0;
-  }
-  
-  public boolean isWritable(){
-    return this.encodePipeline.getOutBuffer().getReadableSize()>0;
-  }
 
   protected void handleConnected() {
     LOG.debug("channel connected: %s %s", this, socketChannel);
@@ -303,6 +308,26 @@ public class Channel implements Hostable {
   protected void handleReadCompleted() {
     for (ConnectionListener cl : connectionListener) {
       cl.onReadCompleted(this);
+    }
+  }
+
+  private synchronized void _requestRead(int readMode) {
+    if (this.readState == RS_COMPLETED) {
+      LOG.debug("%s: read completed, read request is ignored");
+      return;
+    }
+    this.readMode = readMode;
+    host.registerRead(this);
+  }
+
+  private boolean isMatchReadMode(int oldReadableSize, int newReadableSize) {
+    switch (readMode) {
+      case READ_MODE_READ_AVAILABLE:
+        return newReadableSize > 0;
+      case READ_MODE_READ_MORE:
+        return newReadableSize > oldReadableSize;
+      default:
+        throw new RuntimeException("unknown read mode:" + readMode);
     }
   }
 

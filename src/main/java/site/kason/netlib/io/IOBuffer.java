@@ -77,6 +77,11 @@ public class IOBuffer {
     poll0(dest, 0, dest.length);
   }
 
+  public void clear() {
+    setReadPosition(0);
+    setWritePosition(0);
+  }
+
   public void addListener(IOBufferListener listener) {
     this.listeners.add(listener);
   }

@@ -54,10 +54,11 @@ public class SSLSession {
   }
 
   public void handleRead(IOBuffer in, IOBuffer out) throws SSLException, IOException {
-    if (this.isHandshaked()) {
-      this.decrypt(in, out);
-    } else {
+    if (!isHandshaked()) {
       this.handshakeRead(in);
+    }
+    if (isHandshaked()) {
+      this.decrypt(in, out);
     }
   }
 
@@ -75,14 +76,14 @@ public class SSLSession {
     if (this.finishHandshakePending) {
       this.finishHandshake();
     } else {
-      this.handshakeReadBuffer.compact();
+      this.handshakeReadBuffer.clear();
       this.handshakeReadBuffer.push(in);
       this.prepareNextOperationOfHandshake(sslEngine.getHandshakeStatus());
+      in.moveReadPosition(-handshakeReadBuffer.getReadableSize());
     }
   }
 
   private void handshakeWrite(IOBuffer out) throws SSLException, IOException {
-    //System.out.println("handling wrap:" + channel);
     if (handshakeWriteBuffer.getReadableSize() > 0) {
       out.push(this.handshakeWriteBuffer);
       this.handshakeWriteBuffer.compact();
@@ -114,8 +115,8 @@ public class SSLSession {
       this.handleResult(unwrapResult);
     } else if (hs == HandshakeStatus.FINISHED) {
       this.finishHandshakePending = true;
-      channel.continueRead();
-      channel.continueWrite();
+      channel.requestRead();
+      channel.requestWrite();
       //System.out.println("handling FINISHED");
     } else if (hs == HandshakeStatus.NOT_HANDSHAKING) {
       sslEngine.beginHandshake();
@@ -135,15 +136,15 @@ public class SSLSession {
     if (byteProduced > 0) {
       LOG.debug("%s: handshake produces %d bytes", channel, byteProduced);
       handshakeWriteBuffer.setWritePosition(handshakeWriteBuffer.getWritePosition() + byteProduced);
-      channel.continueWrite();
+      channel.requestWrite();
     }
     SSLEngineResult.Status status = result.getStatus();
     if (status == SSLEngineResult.Status.OK) {
       this.prepareNextOperationOfHandshake(result.getHandshakeStatus());
     } else if (status == SSLEngineResult.Status.BUFFER_OVERFLOW) {
-      channel.continueWrite();
+      channel.requestWrite();
     } else if (status == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
-      channel.continueRead();
+      channel.requestRead();
     } else {
       throw new RuntimeException("unexpected status:" + status);
     }
@@ -160,25 +161,6 @@ public class SSLSession {
   }
 
   private void decrypt(IOBuffer source, IOBuffer dest) throws SSLException {
-    if (handshakeReadBuffer != null) {
-      handshakeReadBuffer.compact();
-      int remainingLen = handshakeReadBuffer.getReadableSize();
-      int pushedLen =  handshakeReadBuffer.push(source);
-      source.moveReadPosition(-pushedLen);
-      this._decrypt(handshakeReadBuffer, dest);
-      int consumedLen = remainingLen + pushedLen - handshakeReadBuffer.getReadableSize();
-      if (consumedLen < remainingLen) {
-        handshakeReadBuffer.moveWritePosition(-pushedLen);
-      } else {
-        handshakeReadBuffer = null;
-        source.moveReadPosition(consumedLen - remainingLen);
-      }
-    } else {
-      this._decrypt(source, dest);
-    }
-  }
-
-  private void _decrypt(IOBuffer source, IOBuffer dest) throws SSLException {
     ByteBuffer srcBf = ByteBuffer.wrap(source.array(), source.getReadPosition(), source.getReadableSize());
     ByteBuffer outBf = ByteBuffer.wrap(dest.array(), dest.getWritePosition(), dest.getWritableSize());
     SSLEngineResult res = sslEngine.unwrap(srcBf, outBf);
@@ -193,8 +175,8 @@ public class SSLSession {
     LOG.debug("%s: remaining read buffer %d", channel, handshakeReadBuffer.getReadableSize());
     this.handshaked = true;
     this.handshaking = false;
-    channel.continueRead();
-    channel.continueWrite();
+    channel.requestRead();
+    channel.requestWrite();
     //System.out.println("handshake finished.");
   }
 
