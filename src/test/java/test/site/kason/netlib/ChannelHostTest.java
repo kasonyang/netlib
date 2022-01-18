@@ -88,6 +88,7 @@ public class ChannelHostTest {
             Assert.assertTrue(written.get());
             if(counter<3){//test prepareRead even if no new data arrived
               counter++;
+              channel.requestRead();
               return false;
             }
             int rlen = b.getReadableSize();

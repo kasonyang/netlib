@@ -204,12 +204,8 @@ public class Channel implements Hostable {
     host.unregisterRead(this);
   }
 
-  /**
-   *
-   * @return true if no more data to handle
-   */
   @SneakyThrows
-  protected synchronized boolean handleRead() {
+  protected synchronized void handleRead() {
     LOG.debug("%s: handle read", this);
     SocketChannel sc = this.socketChannel;
     IOBuffer in = decodePipeline.getInBuffer();
@@ -232,27 +228,31 @@ public class Channel implements Hostable {
       if (this.readState == RS_COMPLETE_PENDING) {
         this.readState = RS_COMPLETED;
         LOG.debug("%s: read state: RS_COMPLETED", this);
-        host.unregisterRead(this);
+        pauseRead();
         this.handleReadCompleted();
       }
-      return true;
+      if (in.getWritableSize() <= 0) {
+        throw new IllegalStateException("larger buffer required.");
+      }
+      return;
     }
     List<ReadTask> readCallbacks = readTasks;
     if (readCallbacks.size() > 0) {
       ReadTask cb = readCallbacks.get(0);
       LOG.debug("%s: calling read task %s", this, cb);
+      pauseRead();
       boolean readFinished = cb.handleRead(this, out);
       if (readFinished) {
         LOG.debug("%s: read task finished: %s", this, cb);
         readCallbacks.remove(0);
+        if (!readCallbacks.isEmpty()) {
+          requestRead();
+        }
       }
     }
     if (readCallbacks.isEmpty()) {
       LOG.debug("%s: no more read tasks", this);
-      host.unregisterRead(this);
-      return true;
     }
-    return false;
   }
 
   public synchronized void requestConnect() {
@@ -313,7 +313,7 @@ public class Channel implements Hostable {
 
   private synchronized void _requestRead(int readMode) {
     if (this.readState == RS_COMPLETED) {
-      LOG.debug("%s: read completed, read request is ignored");
+      LOG.debug("%s: read completed, read request is ignored", this);
       return;
     }
     this.readMode = readMode;

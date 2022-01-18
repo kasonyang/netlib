@@ -187,10 +187,7 @@ public class ChannelHost implements Host {
       List<Channel> readList = new ArrayList<>(this.readQueue);
       this.readQueue.clear();
       for (Channel r : readList) {
-        ExecChannelResult<Boolean> handleResult = execChannelBusiness(r, r::handleRead);
-        if (handleResult.isSuccessful && !handleResult.value && isReadRegistered(r)) {
-          this.readQueue.add(r);
-        }
+        execChannelBusiness(r, r::handleRead);
       }
       List<Channel> writeList = new ArrayList<>(this.writeQueue);
       this.writeQueue.clear();
