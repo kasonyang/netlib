@@ -3,8 +3,13 @@ repositories {
   mavenCentral()
 }
 dependencies {
-  compile 'com.google.code.findbugs:jsr305:3.0.1'
   compileOnly 'org.projectlombok:lombok:1.18.8'
+  annotationProcessor 'org.projectlombok:lombok:1.18.8'
+  compile 'site.kason.kalang:kalang-compiler:20220220.164015.0'
+  compile 'com.google.code.findbugs:jsr305:3.0.1'
+
+  testCompile 'org.projectlombok:lombok:1.18.8'
+  testAnnotationProcessor 'org.projectlombok:lombok:1.18.8'
   testCompile 'junit:junit:4.12'
 }
 

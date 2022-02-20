@@ -1,4 +1,4 @@
-package site.kason.netlib.tcp;
+package site.kason.netlib;
 
 import java.nio.channels.SelectableChannel;
 

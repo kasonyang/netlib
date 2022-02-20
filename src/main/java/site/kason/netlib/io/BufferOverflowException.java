@@ -1,7 +1,6 @@
 package site.kason.netlib.io;
 
 /**
- *
  * @author Kason Yang
  */
 public class BufferOverflowException extends RuntimeException {
